@@ -10,17 +10,22 @@ from datetime import date
 from pathlib import Path
 
 import segno
-from flask import Flask, Response, jsonify, render_template, request
+from flask import Flask, Response, jsonify, redirect, render_template, request, session, url_for
 from youtubesearchpython import Video, VideosSearch
 
 app = Flask(__name__)
+
+APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
+app.secret_key = os.environ.get("SECRET_KEY") or (
+    hashlib.sha256(APP_PASSWORD.encode()).hexdigest() if APP_PASSWORD else "local-dev-secret"
+)
 
 BASE_DIR = Path(__file__).parent
 SUGGESTIONS_PATH = BASE_DIR / "data" / "suggestions.json"
 REPORTS_PATH = BASE_DIR / "data" / "reports.json"
 ROOMS_PATH = BASE_DIR / "data" / "rooms.json"
 ROOM_TTL = 86400 * 2
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
 
 GENRES = ["rock", "pop", "jazz", "lo-fi", "hip-hop", "electronic", "indie", "turkish-pop", "turkish-rock"]
 LANGUAGES = ["tr", "en", "ja", "ko"]
@@ -408,6 +413,39 @@ def video_by_id(video_id, lang="tr"):
 
 def room_code():
     return "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
+
+
+@app.before_request
+def require_site_password():
+    if not APP_PASSWORD or session.get("site_ok"):
+        return None
+    if request.endpoint in ("login", "logout", "static"):
+        return None
+    return redirect(url_for("login", next=request.path))
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if not APP_PASSWORD:
+        return redirect("/")
+    if session.get("site_ok"):
+        return redirect(request.args.get("next") or "/")
+    error = None
+    if request.method == "POST":
+        if request.form.get("password") == APP_PASSWORD:
+            session["site_ok"] = True
+            nxt = request.form.get("next") or request.args.get("next") or "/"
+            if not nxt.startswith("/") or nxt.startswith("//"):
+                nxt = "/"
+            return redirect(nxt)
+        error = "Yanlış şifre"
+    return render_template("login.html", error=error, next_url=request.args.get("next", "/"))
+
+
+@app.route("/logout")
+def logout():
+    session.pop("site_ok", None)
+    return redirect(url_for("login"))
 
 
 @app.route("/")

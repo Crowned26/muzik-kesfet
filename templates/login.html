@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Giriş — Müzik Keşfet</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <style>
+    .login-wrap { min-height: 100dvh; display: grid; place-items: center; padding: 24px; }
+    .login-card { width: 100%; max-width: 360px; padding: 28px; border-radius: 18px; background: var(--panel); border: 1px solid var(--panel-border); }
+    .login-card h1 { margin: 0 0 8px; font-size: 1.4rem; }
+    .login-card p { margin: 0 0 20px; color: var(--muted); font-size: 0.9rem; }
+    .login-card input { width: 100%; margin-bottom: 12px; }
+    .login-err { color: #f66; font-size: 0.85rem; margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+  <div class="login-wrap">
+    <form class="login-card panel" method="post" action="{{ url_for('login') }}">
+      <h1>🎵 Müzik Keşfet</h1>
+      <p>Bu site şifre korumalı. Devam etmek için şifreyi gir.</p>
+      {% if error %}<p class="login-err">{{ error }}</p>{% endif %}
+      <input type="hidden" name="next" value="{{ next_url }}">
+      <input type="password" name="password" class="search-input" placeholder="Site şifresi" autofocus required>
+      <button type="submit" class="btn primary" style="width:100%">Giriş</button>
+    </form>
+  </div>
+</body>
+</html>
