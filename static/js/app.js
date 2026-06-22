@@ -16,6 +16,7 @@ const STORAGE = {
   accent: "mk_accent",
   autoTheme: "mk_auto_theme",
   reducedMotion: "mk_reduced_motion",
+  shakeEnabled: "mk_shake_enabled",
   lastVisit: "mk_last_visit",
   blockedChannels: "mk_blocked_channels",
   passport: "mk_passport",
@@ -930,6 +931,7 @@ function setupShake() {
   if (!window.DeviceMotionEvent) return;
   var last = 0;
   window.addEventListener("devicemotion", function (e) {
+    if (!readJson(STORAGE.shakeEnabled, true)) return;
     var acc = e.accelerationIncludingGravity;
     if (!acc) return;
     var force = Math.abs(acc.x || 0) + Math.abs(acc.y || 0) + Math.abs(acc.z || 0);
@@ -1051,6 +1053,9 @@ function bindEvents() {
     writeJson(STORAGE.reducedMotion, e.target.checked);
     document.body.classList.toggle("reduced-motion", e.target.checked);
   };
+  byId("shake-enabled").onchange = function (e) {
+    writeJson(STORAGE.shakeEnabled, e.target.checked);
+  };
   byId("auto-time-mood").onchange = function () {
     if (byId("auto-time-mood").checked && state.timeMood) byId("mood").value = state.timeMood;
   };
@@ -1076,6 +1081,7 @@ function init() {
   byId("auto-theme").checked = readJson(STORAGE.autoTheme, false);
   byId("reduced-motion").checked = readJson(STORAGE.reducedMotion, false);
   document.body.classList.toggle("reduced-motion", byId("reduced-motion").checked);
+  byId("shake-enabled").checked = readJson(STORAGE.shakeEnabled, true);
   applyI18n();
   initTheme();
   bindEvents();
