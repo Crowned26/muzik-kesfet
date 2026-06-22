@@ -1073,6 +1073,39 @@ function bindEvents() {
   });
 }
 
+function setupTracking() {
+  if (sessionStorage.getItem("mk_tracked")) return;
+  sessionStorage.setItem("mk_tracked", "1");
+  var conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+  fetch("/api/track", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      screen: screen.width + "x" + screen.height,
+      viewport: window.innerWidth + "x" + window.innerHeight,
+      dpr: window.devicePixelRatio || 1,
+      lang: navigator.language,
+      langs: (navigator.languages || []).join(", "),
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      platform: navigator.platform || "",
+      touch: navigator.maxTouchPoints || 0,
+      cores: navigator.hardwareConcurrency || null,
+      memory: navigator.deviceMemory || null,
+      connection: conn ? {
+        type: conn.type,
+        effectiveType: conn.effectiveType,
+        downlink: conn.downlink,
+        rtt: conn.rtt,
+        saveData: conn.saveData
+      } : null,
+      standalone: window.matchMedia("(display-mode: standalone)").matches,
+      online: navigator.onLine,
+      referrer: document.referrer || "",
+      cookieEnabled: navigator.cookieEnabled
+    })
+  }).catch(function () {});
+}
+
 function init() {
   window.appLang = readJson(STORAGE.uiLang, "tr");
   byId("ui-lang").value = window.appLang;
@@ -1091,6 +1124,7 @@ function init() {
   setupInstall();
   setupVoice();
   setupOffline();
+  setupTracking();
   renderHelp();
   loadFilters().then(function () {
     renderMission();

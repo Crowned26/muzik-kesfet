@@ -5,12 +5,24 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Admin — Müzik Keşfet</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <style>
+    .visit-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+    .visit-table th, .visit-table td { text-align: left; padding: 8px 6px; border-bottom: 1px solid rgba(255,255,255,.08); vertical-align: top; }
+    .visit-table th { opacity: .7; font-weight: 600; }
+    .visit-meta { font-size: 11px; opacity: .75; margin-top: 4px; line-height: 1.4; }
+    .visit-badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; background: rgba(255,255,255,.1); margin-right: 4px; }
+    .visit-badge.warn { background: rgba(255,180,0,.25); }
+  </style>
 </head>
 <body>
   <div class="app">
     <h1>Admin Panel</h1>
-    <p>Şarkılar YouTube'dan geliyor. Burada kullanıcı önerileri ve video bildirimleri listelenir.</p>
+    <p>Şarkılar YouTube'dan geliyor. Burada kullanıcı önerileri, video bildirimleri ve ziyaret logları listelenir.</p>
     <input type="password" id="admin-pass" class="search-input" placeholder="Admin şifresi">
+    <div class="panel side-panel" style="margin-top:16px">
+      <h3>Son Ziyaretler <span id="visit-count" style="opacity:.6;font-weight:normal"></span></h3>
+      <div id="a-visits"><p class="visit-meta">Admin şifresini girin.</p></div>
+    </div>
     <div class="panel side-panel" style="margin-top:16px">
       <h3>Kullanıcı Önerileri</h3>
       <ul id="a-suggestions" class="list"></ul>
@@ -25,14 +37,71 @@
     const pass = () => document.getElementById("admin-pass").value;
     const headers = () => ({ "X-Admin-Password": pass() });
 
+    function fmtTime(ts) {
+      if (!ts) return "—";
+      return new Date(ts * 1000).toLocaleString("tr-TR");
+    }
+
+    function esc(s) {
+      return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    function renderVisits(visits) {
+      const el = document.getElementById("a-visits");
+      document.getElementById("visit-count").textContent = visits.length ? "(" + visits.length + ")" : "";
+      if (!visits.length) {
+        el.innerHTML = "<p class=\"visit-meta\">Henüz ziyaret kaydı yok.</p>";
+        return;
+      }
+      const rows = visits.map(function (v) {
+        const ua = v.ua || {};
+        const geo = v.geo || {};
+        const c = v.client || {};
+        const loc = [geo.city, geo.regionName, geo.country].filter(Boolean).join(", ") || "—";
+        const badges = [];
+        badges.push("<span class=\"visit-badge\">" + esc(v.event) + "</span>");
+        if (ua.device) badges.push("<span class=\"visit-badge\">" + esc(ua.device) + "</span>");
+        if (c.standalone) badges.push("<span class=\"visit-badge\">PWA</span>");
+        if (geo.mobile) badges.push("<span class=\"visit-badge\">Mobil IP</span>");
+        if (geo.proxy) badges.push("<span class=\"visit-badge warn\">Proxy/VPN</span>");
+        if (geo.hosting) badges.push("<span class=\"visit-badge warn\">Hosting/DC</span>");
+        const conn = c.connection;
+        const connStr = conn ? [conn.effectiveType, conn.type, conn.downlink ? conn.downlink + "Mbps" : ""].filter(Boolean).join(" · ") : "";
+        const meta = [
+          c.screen ? "Ekran: " + esc(c.screen) + (c.viewport ? " (görünüm " + esc(c.viewport) + ")" : "") : "",
+          c.dpr ? "DPR: " + esc(c.dpr) : "",
+          c.lang ? "Dil: " + esc(c.lang) : "",
+          c.timezone ? "TZ: " + esc(c.timezone) : "",
+          c.platform ? "Platform: " + esc(c.platform) : "",
+          c.touch != null ? "Dokunma: " + esc(c.touch) : "",
+          c.cores ? "CPU: " + esc(c.cores) + " çekirdek" : "",
+          c.memory ? "RAM: ~" + esc(c.memory) + " GB" : "",
+          connStr ? "Bağlantı: " + esc(connStr) : "",
+          geo.isp ? "ISP: " + esc(geo.isp) : "",
+          v.referrer ? "Referrer: " + esc(v.referrer) : (c.referrer ? "Referrer: " + esc(c.referrer) : "")
+        ].filter(Boolean).join(" · ");
+        return "<tr>" +
+          "<td>" + esc(fmtTime(v.at)) + "<div class=\"visit-meta\">" + badges.join("") + "</div></td>" +
+          "<td>" + esc(v.ip) + "<div class=\"visit-meta\">" + esc(loc) + "</div></td>" +
+          "<td>" + esc(ua.browser || "?") + " / " + esc(ua.os || "?") +
+          "<div class=\"visit-meta\">" + esc((v.ua_raw || "").slice(0, 80)) + "…</div></td>" +
+          "<td><div class=\"visit-meta\">" + (meta || "—") + "</div></td>" +
+          "</tr>";
+      }).join("");
+      el.innerHTML = "<table class=\"visit-table\"><thead><tr><th>Zaman</th><th>IP / Konum</th><th>Cihaz / UA</th><th>Detay</th></tr></thead><tbody>" + rows + "</tbody></table>";
+    }
+
     async function loadAdmin() {
-      const [sRes, rRes] = await Promise.all([
+      const [sRes, rRes, vRes] = await Promise.all([
         fetch("/api/admin/suggestions", { headers: headers() }),
         fetch("/api/admin/reports", { headers: headers() }),
+        fetch("/api/admin/visits", { headers: headers() }),
       ]);
-      if (!sRes.ok || !rRes.ok) return;
+      if (!sRes.ok || !rRes.ok || !vRes.ok) return;
       const suggestions = await sRes.json();
       const reports = await rRes.json();
+      const visits = await vRes.json();
+      renderVisits(visits);
       document.getElementById("a-suggestions").innerHTML = suggestions.length
         ? suggestions.map(s => "<li>" + s.artist + " — " + s.title + "</li>").join("")
         : "<li>Henüz öneri yok.</li>";
@@ -42,6 +111,9 @@
     }
 
     document.getElementById("admin-pass").addEventListener("change", loadAdmin);
+    document.getElementById("admin-pass").addEventListener("keyup", function (e) {
+      if (e.key === "Enter") loadAdmin();
+    });
   </script>
 </body>
 </html>

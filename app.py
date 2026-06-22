@@ -6,6 +6,7 @@ import random
 import re
 import string
 import time
+import urllib.request
 from datetime import date
 from pathlib import Path
 
@@ -25,7 +26,9 @@ BASE_DIR = Path(__file__).parent
 SUGGESTIONS_PATH = BASE_DIR / "data" / "suggestions.json"
 REPORTS_PATH = BASE_DIR / "data" / "reports.json"
 ROOMS_PATH = BASE_DIR / "data" / "rooms.json"
+VISITS_PATH = BASE_DIR / "data" / "visits.json"
 ROOM_TTL = 86400 * 2
+MAX_VISITS = 200
 
 GENRES = ["rock", "pop", "jazz", "lo-fi", "hip-hop", "electronic", "indie", "turkish-pop", "turkish-rock"]
 LANGUAGES = ["tr", "en", "ja", "ko"]
@@ -126,6 +129,90 @@ def save_json_list(path, data):
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def client_ip():
+    fwd = request.headers.get("X-Forwarded-For", "")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.remote_addr or ""
+
+
+def parse_user_agent(ua):
+    ua = ua or ""
+    mobile = any(x in ua for x in ("Mobile", "Android", "iPhone", "iPod"))
+    tablet = "iPad" in ua or ("Android" in ua and "Mobile" not in ua)
+    browser = "Unknown"
+    if "Edg/" in ua:
+        browser = "Edge"
+    elif "Chrome/" in ua and "Chromium" not in ua:
+        browser = "Chrome"
+    elif "Firefox/" in ua:
+        browser = "Firefox"
+    elif "Safari/" in ua and "Chrome" not in ua:
+        browser = "Safari"
+    elif "Opera" in ua or "OPR/" in ua:
+        browser = "Opera"
+    os_name = "Unknown"
+    if "iPhone" in ua or "iPod" in ua:
+        os_name = "iOS"
+    elif "iPad" in ua:
+        os_name = "iPadOS"
+    elif "Android" in ua:
+        m = re.search(r"Android (\d+(?:\.\d+)?)", ua)
+        os_name = "Android " + (m.group(1) if m else "")
+    elif "Mac OS X" in ua or "Macintosh" in ua:
+        m = re.search(r"Mac OS X (\d+[._]\d+)", ua)
+        os_name = "macOS " + (m.group(1).replace("_", ".") if m else "")
+    elif "Windows NT" in ua:
+        m = re.search(r"Windows NT (\d+\.\d+)", ua)
+        win_map = {"10.0": "10/11", "6.3": "8.1", "6.2": "8", "6.1": "7"}
+        ver = win_map.get(m.group(1), m.group(1)) if m else ""
+        os_name = "Windows " + ver
+    elif "Linux" in ua:
+        os_name = "Linux"
+    device = "tablet" if tablet else ("mobile" if mobile else "desktop")
+    return {"browser": browser, "os": os_name, "device": device, "mobile": mobile or tablet}
+
+
+def lookup_geo(ip):
+    if not ip or ip.startswith("127.") or ip.startswith("10.") or ip.startswith("192.168.") or ip == "::1":
+        return {}
+    try:
+        url = f"http://ip-api.com/json/{ip}?fields=status,country,regionName,city,isp,mobile,proxy,hosting"
+        with urllib.request.urlopen(url, timeout=2) as resp:
+            d = json.loads(resp.read().decode())
+        if d.get("status") == "success":
+            return {k: d[k] for k in ("country", "regionName", "city", "isp", "mobile", "proxy", "hosting") if k in d}
+    except Exception:
+        pass
+    return {}
+
+
+def append_visit(record):
+    visits = load_json_list(VISITS_PATH)
+    visits.append(record)
+    if len(visits) > MAX_VISITS:
+        visits = visits[-MAX_VISITS:]
+    save_json_list(VISITS_PATH, visits)
+
+
+def log_visit(event, client_meta=None):
+    ip = client_ip()
+    ua_raw = request.headers.get("User-Agent", "")
+    record = {
+        "at": time.time(),
+        "event": event,
+        "ip": ip,
+        "geo": lookup_geo(ip),
+        "ua_raw": ua_raw[:500],
+        "ua": parse_user_agent(ua_raw),
+        "path": request.path,
+        "referrer": request.referrer or "",
+        "client": client_meta or {},
+    }
+    append_visit(record)
+    return record
 
 
 def load_rooms():
@@ -434,6 +521,7 @@ def login():
     if request.method == "POST":
         if request.form.get("password") == APP_PASSWORD:
             session["site_ok"] = True
+            log_visit("login")
             nxt = request.form.get("next") or request.args.get("next") or "/"
             if not nxt.startswith("/") or nxt.startswith("//"):
                 nxt = "/"
@@ -712,6 +800,23 @@ def admin_reports():
     if not check_admin():
         return jsonify({"error": "unauthorized"}), 401
     return jsonify(load_json_list(REPORTS_PATH))
+
+
+@app.route("/api/track", methods=["POST"])
+def track_client():
+    if APP_PASSWORD and not session.get("site_ok"):
+        return jsonify({"error": "unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    log_visit("session", client_meta=data)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/admin/visits")
+def admin_visits():
+    if not check_admin():
+        return jsonify({"error": "unauthorized"}), 401
+    visits = load_json_list(VISITS_PATH)
+    return jsonify(list(reversed(visits)))
 
 
 if __name__ == "__main__":
