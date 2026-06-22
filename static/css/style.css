@@ -386,6 +386,15 @@ body.is-offline { padding-top: calc(36px + var(--safe-top)); }
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
 
+/* Admin / visits */
+.visit-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+.visit-table th, .visit-table td { text-align: left; padding: 8px 6px; border-bottom: 1px solid rgba(255,255,255,.08); vertical-align: top; }
+.visit-table th { opacity: .7; font-weight: 600; }
+.visit-meta { font-size: 11px; opacity: .75; margin-top: 4px; line-height: 1.4; }
+.visit-badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; background: rgba(255,255,255,.1); margin-right: 4px; }
+.visit-badge.warn { background: rgba(255,180,0,.25); }
+.admin-err { color: #f66; font-size: 0.85rem; margin: 8px 0 0; }
+
 /* Print */
 @media print {
   .tabs, .filters, .loader, .footer, .result-actions, .player-wrap { display: none !important; }

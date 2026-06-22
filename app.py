@@ -506,7 +506,9 @@ def room_code():
 def require_site_password():
     if not APP_PASSWORD or session.get("site_ok"):
         return None
-    if request.endpoint in ("login", "logout", "static"):
+    if request.endpoint in ("login", "logout", "static", "admin_page"):
+        return None
+    if request.path.startswith("/api/admin/"):
         return None
     return redirect(url_for("login", next=request.path))
 
@@ -785,7 +787,30 @@ def suggest_song():
 
 
 def check_admin():
+    if session.get("admin_ok"):
+        return True
     return request.headers.get("X-Admin-Password") == ADMIN_PASSWORD
+
+
+@app.route("/api/admin/status")
+def admin_status():
+    return jsonify({"ok": check_admin()})
+
+
+@app.route("/api/admin/unlock", methods=["POST"])
+def admin_unlock():
+    data = request.get_json(silent=True) or {}
+    pw = data.get("password") or request.form.get("password", "")
+    if pw == ADMIN_PASSWORD:
+        session["admin_ok"] = True
+        return jsonify({"ok": True})
+    return jsonify({"error": "wrong"}), 401
+
+
+@app.route("/api/admin/logout", methods=["POST"])
+def admin_logout():
+    session.pop("admin_ok", None)
+    return jsonify({"ok": True})
 
 
 @app.route("/api/admin/suggestions")
