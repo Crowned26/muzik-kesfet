@@ -1077,11 +1077,96 @@ function adminEsc(s) {
   return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function renderAdminVisits(visits) {
+function adminFmtBytes(n) {
+  if (n == null || isNaN(n)) return "";
+  return Math.round(n) + " MB";
+}
+
+function adminDetailLines(v) {
+  var geo = v.geo || {};
+  var c = v.client || {};
+  var srv = v.server || {};
+  var conn = c.connection;
+  var lines = [];
+  if (v.visit_id) lines.push(["Oturum ID", v.visit_id]);
+  if (c.screen) {
+    lines.push(["Ekran", c.screen + (c.viewport ? " (görünüm " + c.viewport + ")" : "")]);
+  }
+  if (c.screenAvail) lines.push(["Kullanılabilir ekran", c.screenAvail]);
+  if (c.outerSize) lines.push(["Pencere (dış)", c.outerSize]);
+  if (c.colorDepth) lines.push(["Renk derinliği", c.colorDepth + " bit"]);
+  if (c.dpr) lines.push(["DPR", String(c.dpr)]);
+  if (c.orientation) {
+    lines.push(["Yönelim", c.orientation + (c.orientationAngle != null ? " · " + c.orientationAngle + "°" : "")]);
+  }
+  if (c.lang) lines.push(["Dil", c.lang + (c.langs ? " · " + c.langs : "")]);
+  if (srv.accept_language) lines.push(["Accept-Language", srv.accept_language]);
+  if (c.timezone) lines.push(["Saat dilimi", c.timezone]);
+  if (c.platform) lines.push(["Platform", c.platform]);
+  if (c.vendor) lines.push(["Tarayıcı motoru", c.vendor]);
+  if (c.colorScheme) lines.push(["Tema", c.colorScheme]);
+  if (c.reducedMotion) lines.push(["Az animasyon", "evet"]);
+  if (c.highContrast) lines.push(["Yüksek kontrast", "evet"]);
+  if (c.touch != null) lines.push(["Dokunma", c.touch + " nokta"]);
+  if (c.cores) lines.push(["CPU", c.cores + " çekirdek"]);
+  if (c.memory) lines.push(["RAM", "~" + c.memory + " GB"]);
+  if (conn) {
+    var cp = [conn.effectiveType, conn.type, conn.downlink ? conn.downlink + " Mbps" : "", conn.rtt ? conn.rtt + " ms" : ""].filter(Boolean);
+    if (conn.saveData) cp.push("veri tasarrufu");
+    if (cp.length) lines.push(["Bağlantı", cp.join(" · ")]);
+  }
+  if (c.storage) {
+    lines.push(["Depolama", adminFmtBytes(c.storage.usageMb) + " / " + adminFmtBytes(c.storage.quotaMb)]);
+  }
+  var ch = c.clientHints || srv.client_hints;
+  if (ch) {
+    if (ch.model) lines.push(["Model (CH)", ch.model]);
+    if (ch.platform_version || ch.platformVersion) lines.push(["Platform sürüm", ch.platform_version || ch.platformVersion]);
+    if (ch.architecture) lines.push(["Mimari", ch.architecture]);
+    if (ch.bitness) lines.push(["Bit", ch.bitness]);
+    if (ch.uaFullVersion) lines.push(["Tarayıcı sürüm", ch.uaFullVersion]);
+    if (ch.brands && typeof ch.brands === "string") lines.push(["CH markalar", ch.brands]);
+  }
+  if (c.webdriver) lines.push(["Bot şüphesi", "webdriver"]);
+  if (c.doNotTrack === "1") lines.push(["Do Not Track", "açık"]);
+  if (c.pdfViewer === false) lines.push(["PDF görüntüleyici", "kapalı"]);
+  if (c.historyLength) lines.push(["Geçmiş derinliği", String(c.historyLength)]);
+  if (c.visibility) lines.push(["Sekme durumu", c.visibility]);
+  if (c.online === false) lines.push(["Durum", "offline"]);
+  if (geo.isp) lines.push(["ISP", geo.isp]);
+  if (geo.zip) lines.push(["Posta kodu (IP)", String(geo.zip)]);
+  if (geo.timezone) lines.push(["IP saat dilimi", geo.timezone]);
+  if (geo.lat != null && geo.lon != null) lines.push(["Koordinat (IP)", geo.lat + ", " + geo.lon]);
+  if (c.geoPrecise) {
+    lines.push(["GPS", c.geoPrecise.lat + ", " + c.geoPrecise.lon + (c.geoPrecise.acc ? " ±" + Math.round(c.geoPrecise.acc) + "m" : "")]);
+  }
+  if (c.fingerprint) {
+    if (c.fingerprint.webglRenderer) lines.push(["GPU", c.fingerprint.webglRenderer]);
+    if (c.fingerprint.webglVendor) lines.push(["GPU üretici", c.fingerprint.webglVendor]);
+    if (c.fingerprint.canvasHash) lines.push(["Canvas iz", c.fingerprint.canvasHash]);
+  }
+  if (c.intlCalendar) lines.push(["Takvim", c.intlCalendar]);
+  if (c.intlNumbering) lines.push(["Sayı sistemi", c.intlNumbering]);
+  if (c.notificationPermission) lines.push(["Bildirim izni", c.notificationPermission]);
+  if (c.speechVoices != null) lines.push(["Ses motoru", c.speechVoices + " adet"]);
+  if (c.pageUrl) lines.push(["Sayfa URL", c.pageUrl]);
+  if (srv.cf_country) lines.push(["CF ülke kodu", srv.cf_country]);
+  if (geo.hosting) lines.push(["IP tipi", "Hosting / veri merkezi"]);
+  if (geo.mobile) lines.push(["IP tipi", "Mobil operatör"]);
+  var ref = v.referrer || c.referrer;
+  if (ref) lines.push(["Referrer", ref]);
+  if (v.path) lines.push(["İstek", v.path]);
+  if (v.ua_raw) lines.push(["User-Agent", v.ua_raw]);
+  return lines;
+}
+
+function renderAdminVisits(visits, totalCount) {
   var el = byId("admin-visits");
   var countEl = byId("visit-count");
   if (!el) return;
-  if (countEl) countEl.textContent = visits.length ? "(" + visits.length + ")" : "";
+  var shown = visits.length;
+  var total = totalCount != null ? totalCount : shown;
+  if (countEl) countEl.textContent = total ? ("(" + shown + (shown !== total ? "/" + total : "") + ")") : "";
   if (!visits.length) {
     el.innerHTML = "<p class=\"visit-meta\">" + adminEsc(t("adminNoVisits")) + "</p>";
     return;
@@ -1091,18 +1176,112 @@ function renderAdminVisits(visits) {
     var geo = v.geo || {};
     var c = v.client || {};
     var loc = [geo.city, geo.regionName, geo.country].filter(Boolean).join(", ") || "—";
+    var mapLink = "";
+    if (geo.lat != null && geo.lon != null) {
+      mapLink = "<a class=\"visit-map-link\" href=\"https://www.google.com/maps?q=" + encodeURIComponent(geo.lat + "," + geo.lon) + "\" target=\"_blank\" rel=\"noopener\">📍 Harita</a>";
+    }
     var badges = ["<span class=\"visit-badge\">" + adminEsc(v.event) + "</span>"];
     if (ua.device) badges.push("<span class=\"visit-badge\">" + adminEsc(ua.device) + "</span>");
     if (c.standalone) badges.push("<span class=\"visit-badge\">PWA</span>");
     if (geo.proxy) badges.push("<span class=\"visit-badge warn\">Proxy/VPN</span>");
-    var meta = [c.screen, c.lang, c.timezone, geo.isp].filter(Boolean).map(adminEsc).join(" · ");
+    if (geo.hosting) badges.push("<span class=\"visit-badge warn\">DC</span>");
+    if (geo.mobile) badges.push("<span class=\"visit-badge\">Mobil IP</span>");
+    if (c.online === false) badges.push("<span class=\"visit-badge warn\">Offline</span>");
+    if (c.webdriver) badges.push("<span class=\"visit-badge warn\">Bot</span>");
+    if (v.visit_id) badges.push("<span class=\"visit-badge\">" + adminEsc(v.visit_id) + "</span>");
+    var details = adminDetailLines(v).map(function (pair) {
+      return "<div class=\"visit-detail-line\"><b>" + adminEsc(pair[0]) + ":</b> " + adminEsc(pair[1]) + "</div>";
+    }).join("");
     return "<tr><td>" + adminEsc(new Date(v.at * 1000).toLocaleString(window.appLang === "en" ? "en-US" : "tr-TR")) +
       "<div class=\"visit-meta\">" + badges.join("") + "</div></td>" +
-      "<td>" + adminEsc(v.ip) + "<div class=\"visit-meta\">" + adminEsc(loc) + "</div></td>" +
-      "<td>" + adminEsc(ua.browser || "?") + " / " + adminEsc(ua.os || "?") + "</td>" +
-      "<td><div class=\"visit-meta\">" + (meta || "—") + "</div></td></tr>";
+      "<td>" + adminEsc(v.ip) + "<div class=\"visit-meta\">" + adminEsc(loc) + "</div>" + mapLink + "</td>" +
+      "<td>" + adminEsc(ua.browser || "?") + " / " + adminEsc(ua.os || "?") +
+      "<div class=\"visit-meta\">" + adminEsc(ua.device || "") + "</div></td>" +
+      "<td>" + (details || "<span class=\"visit-meta\">—</span>") + "</td></tr>";
   }).join("");
-  el.innerHTML = "<table class=\"visit-table\"><thead><tr><th>Zaman</th><th>IP / Konum</th><th>Cihaz</th><th>Detay</th></tr></thead><tbody>" + rows + "</tbody></table>";
+  el.innerHTML = "<div class=\"visit-table-wrap\"><table class=\"visit-table\"><thead><tr><th>Zaman</th><th>IP / Konum</th><th>Cihaz</th><th>Detay</th></tr></thead><tbody>" + rows + "</tbody></table></div>";
+}
+
+var adminVisitsCache = [];
+var adminLiveTimer = null;
+
+function renderAdminStats(stats) {
+  var el = byId("admin-stats");
+  if (!el || !stats) return;
+  el.innerHTML = [
+    ["Bugün", stats.today],
+    ["Bu hafta", stats.week],
+    ["Toplam", stats.total],
+    ["Benzersiz IP", stats.unique_ips],
+    ["Oturum", stats.unique_sessions]
+  ].map(function (pair) {
+    return "<div class=\"admin-stat\"><span>" + pair[0] + "</span><b>" + pair[1] + "</b></div>";
+  }).join("");
+}
+
+function filterAdminVisits() {
+  var q = (byId("visit-filter") && byId("visit-filter").value || "").toLowerCase().trim();
+  var ev = byId("visit-event-filter") && byId("visit-event-filter").value || "";
+  var list = adminVisitsCache.filter(function (v) {
+    if (ev && v.event !== ev) return false;
+    if (!q) return true;
+    var blob = [v.ip, v.visit_id, v.event, (v.ua && v.ua.browser), (v.geo && v.geo.city)].join(" ").toLowerCase();
+    return blob.indexOf(q) !== -1;
+  });
+  renderAdminVisits(list, adminVisitsCache.length);
+}
+
+function exportAdminVisitsCsv() {
+  var rows = adminVisitsCache;
+  if (!rows.length) return;
+  var cols = ["at", "event", "visit_id", "ip", "city", "country", "browser", "os", "device", "isp"];
+  var lines = [cols.join(",")];
+  rows.forEach(function (v) {
+    var ua = v.ua || {};
+    var geo = v.geo || {};
+    var vals = [
+      new Date(v.at * 1000).toISOString(),
+      v.event,
+      v.visit_id,
+      v.ip,
+      geo.city,
+      geo.country,
+      ua.browser,
+      ua.os,
+      ua.device,
+      geo.isp
+    ].map(function (x) { return "\"" + String(x || "").replace(/"/g, "\"\"") + "\""; });
+    lines.push(vals.join(","));
+  });
+  var blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+  var a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "ziyaretler-" + new Date().toISOString().slice(0, 10) + ".csv";
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function showVisitToast(msg) {
+  var el = byId("admin-visit-toast");
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.remove("hidden");
+  setTimeout(function () { el.classList.add("hidden"); }, 8000);
+}
+
+function loadAdminVisitsData(notifyNew) {
+  return Promise.all([
+    fetch("/api/admin/visits", { credentials: "same-origin" }).then(function (r) { return r.json(); }),
+    fetch("/api/admin/stats", { credentials: "same-origin" }).then(function (r) { return r.json(); })
+  ]).then(function (data) {
+    var prevAt = adminVisitsCache.length ? adminVisitsCache[0].at : 0;
+    adminVisitsCache = data[0];
+    renderAdminStats(data[1]);
+    filterAdminVisits();
+    if (notifyNew && adminVisitsCache.length && adminVisitsCache[0].at > prevAt) {
+      showVisitToast("Yeni ziyaret: " + adminVisitsCache[0].event + " · " + (adminVisitsCache[0].ip || ""));
+    }
+  });
 }
 
 function setupAdminVisits() {
@@ -1111,11 +1290,32 @@ function setupAdminVisits() {
   fetch("/api/admin/status", { credentials: "same-origin" }).then(function (r) { return r.json(); }).then(function (d) {
     if (!d.ok) return;
     wrap.classList.remove("hidden");
-    fetch("/api/admin/visits", { credentials: "same-origin" }).then(function (r) { return r.json(); }).then(renderAdminVisits).catch(function () {});
+    loadAdminVisitsData(false).catch(function () {});
   }).catch(function () {});
+
+  var filterEl = byId("visit-filter");
+  var eventEl = byId("visit-event-filter");
+  if (filterEl) filterEl.addEventListener("input", filterAdminVisits);
+  if (eventEl) eventEl.addEventListener("change", filterAdminVisits);
+
+  var exportBtn = byId("visit-export-btn");
+  if (exportBtn) exportBtn.addEventListener("click", exportAdminVisitsCsv);
+
+  var liveEl = byId("visit-live");
+  if (liveEl) {
+    liveEl.addEventListener("change", function () {
+      if (adminLiveTimer) clearInterval(adminLiveTimer);
+      adminLiveTimer = null;
+      if (liveEl.checked) {
+        adminLiveTimer = setInterval(function () { loadAdminVisitsData(true).catch(function () {}); }, 30000);
+      }
+    });
+  }
+
   var logoutBtn = byId("admin-logout-btn");
   if (logoutBtn) {
     logoutBtn.addEventListener("click", function () {
+      if (adminLiveTimer) clearInterval(adminLiveTimer);
       fetch("/api/admin/logout", { method: "POST", credentials: "same-origin" }).then(function () {
         wrap.classList.add("hidden");
       });
@@ -1123,37 +1323,136 @@ function setupAdminVisits() {
   }
 }
 
+function collectFingerprint() {
+  try {
+    var fp = {};
+    var canvas = document.createElement("canvas");
+    canvas.width = 220;
+    canvas.height = 60;
+    var ctx = canvas.getContext("2d");
+    if (ctx) {
+      ctx.textBaseline = "top";
+      ctx.font = "14px Arial";
+      ctx.fillStyle = "#f60";
+      ctx.fillRect(0, 0, 100, 50);
+      ctx.fillStyle = "#069";
+      ctx.fillText("mk-fp", 2, 15);
+      fp.canvasHash = canvas.toDataURL().slice(-48);
+    }
+    var gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+    if (gl) {
+      var dbg = gl.getExtension("WEBGL_debug_renderer_info");
+      if (dbg) {
+        fp.webglVendor = String(gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL) || "");
+        fp.webglRenderer = String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || "");
+      }
+    }
+    return fp;
+  } catch (e) {
+    return {};
+  }
+}
+
+function collectClientMeta() {
+  var conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+  var orient = screen.orientation || {};
+  var intl = Intl.DateTimeFormat().resolvedOptions();
+  return {
+    screen: screen.width + "x" + screen.height,
+    screenAvail: screen.availWidth + "x" + screen.availHeight,
+    colorDepth: screen.colorDepth || null,
+    viewport: window.innerWidth + "x" + window.innerHeight,
+    outerSize: window.outerWidth + "x" + window.outerHeight,
+    dpr: window.devicePixelRatio || 1,
+    orientation: orient.type || "",
+    orientationAngle: typeof orient.angle === "number" ? orient.angle : null,
+    lang: navigator.language,
+    langs: (navigator.languages || []).join(", "),
+    timezone: intl.timeZone,
+    intlCalendar: intl.calendar || "",
+    intlNumbering: intl.numberingSystem || "",
+    platform: navigator.platform || "",
+    touch: navigator.maxTouchPoints || 0,
+    cores: navigator.hardwareConcurrency || null,
+    memory: navigator.deviceMemory || null,
+    connection: conn ? {
+      type: conn.type,
+      effectiveType: conn.effectiveType,
+      downlink: conn.downlink,
+      rtt: conn.rtt,
+      saveData: conn.saveData
+    } : null,
+    standalone: window.matchMedia("(display-mode: standalone)").matches,
+    online: navigator.onLine,
+    referrer: document.referrer || "",
+    pageUrl: location.href,
+    cookieEnabled: navigator.cookieEnabled,
+    colorScheme: window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light",
+    reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    highContrast: window.matchMedia("(prefers-contrast: more)").matches,
+    vendor: navigator.vendor || "",
+    webdriver: !!navigator.webdriver,
+    doNotTrack: navigator.doNotTrack || "",
+    pdfViewer: navigator.pdfViewerEnabled !== undefined ? !!navigator.pdfViewerEnabled : null,
+    historyLength: window.history.length || null,
+    visibility: document.visibilityState || "",
+    notificationPermission: typeof Notification !== "undefined" ? Notification.permission : "",
+    speechVoices: window.speechSynthesis ? speechSynthesis.getVoices().length : null,
+    fingerprint: collectFingerprint()
+  };
+}
+
 function setupTracking() {
   if (sessionStorage.getItem("mk_tracked")) return;
   sessionStorage.setItem("mk_tracked", "1");
-  var conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-  fetch("/api/track", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      screen: screen.width + "x" + screen.height,
-      viewport: window.innerWidth + "x" + window.innerHeight,
-      dpr: window.devicePixelRatio || 1,
-      lang: navigator.language,
-      langs: (navigator.languages || []).join(", "),
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      platform: navigator.platform || "",
-      touch: navigator.maxTouchPoints || 0,
-      cores: navigator.hardwareConcurrency || null,
-      memory: navigator.deviceMemory || null,
-      connection: conn ? {
-        type: conn.type,
-        effectiveType: conn.effectiveType,
-        downlink: conn.downlink,
-        rtt: conn.rtt,
-        saveData: conn.saveData
-      } : null,
-      standalone: window.matchMedia("(display-mode: standalone)").matches,
-      online: navigator.onLine,
-      referrer: document.referrer || "",
-      cookieEnabled: navigator.cookieEnabled
-    })
-  }).catch(function () {});
+  var payload = collectClientMeta();
+  var jobs = [];
+  if (navigator.storage && navigator.storage.estimate) {
+    jobs.push(navigator.storage.estimate().then(function (est) {
+      payload.storage = {
+        quotaMb: est.quota ? Math.round(est.quota / 1048576) : null,
+        usageMb: est.usage ? Math.round(est.usage / 1048576) : null
+      };
+    }).catch(function () {}));
+  }
+  if (navigator.userAgentData) {
+    if (navigator.userAgentData.getHighEntropyValues) {
+      jobs.push(navigator.userAgentData.getHighEntropyValues(
+        ["platformVersion", "architecture", "model", "uaFullVersion", "bitness"]
+      ).then(function (d) { payload.clientHints = d; }).catch(function () {}));
+    } else {
+      payload.clientHints = {
+        mobile: navigator.userAgentData.mobile,
+        platform: navigator.userAgentData.platform,
+        brands: (navigator.userAgentData.brands || []).map(function (b) {
+          return b.brand + "/" + b.version;
+        }).join(", ")
+      };
+    }
+  }
+  if (navigator.permissions && navigator.geolocation) {
+    jobs.push(navigator.permissions.query({ name: "geolocation" }).then(function (p) {
+      if (p.state !== "granted") return;
+      return new Promise(function (resolve) {
+        navigator.geolocation.getCurrentPosition(function (pos) {
+          payload.geoPrecise = {
+            lat: pos.coords.latitude,
+            lon: pos.coords.longitude,
+            acc: pos.coords.accuracy
+          };
+          resolve();
+        }, function () { resolve(); }, { maximumAge: 600000, timeout: 4000 });
+      });
+    }).catch(function () {}));
+  }
+  Promise.all(jobs).finally(function () {
+    fetch("/api/track", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }).catch(function () {});
+  });
 }
 
 function init() {

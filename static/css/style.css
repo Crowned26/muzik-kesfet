@@ -394,6 +394,17 @@ body.is-offline { padding-top: calc(36px + var(--safe-top)); }
 .visit-badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; background: rgba(255,255,255,.1); margin-right: 4px; }
 .visit-badge.warn { background: rgba(255,180,0,.25); }
 .admin-err { color: #f66; font-size: 0.85rem; margin: 8px 0 0; }
+.visit-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-top: 8px; }
+.visit-detail-line { font-size: 11px; opacity: .8; line-height: 1.45; margin-top: 3px; }
+.visit-detail-line b { opacity: .9; font-weight: 600; }
+.admin-stats { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.admin-stat { padding: 8px 10px; border-radius: 8px; background: rgba(255,255,255,.06); font-size: 12px; }
+.admin-stat b { display: block; font-size: 1.1rem; }
+.admin-tools { display: grid; gap: 8px; margin-bottom: 10px; }
+.admin-tools .btn, .admin-tools .search-input { width: 100%; }
+.admin-toast { padding: 10px 12px; margin-bottom: 10px; border-radius: 8px; background: rgba(124,92,255,.25); border: 1px solid rgba(124,92,255,.4); font-size: 13px; }
+.admin-toast.hidden { display: none !important; }
+.visit-map-link { font-size: 11px; margin-top: 4px; display: inline-block; }
 
 /* Print */
 @media print {

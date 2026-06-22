@@ -4,6 +4,7 @@ import json
 import os
 import random
 import re
+import secrets
 import string
 import time
 import urllib.request
@@ -179,11 +180,12 @@ def lookup_geo(ip):
     if not ip or ip.startswith("127.") or ip.startswith("10.") or ip.startswith("192.168.") or ip == "::1":
         return {}
     try:
-        url = f"http://ip-api.com/json/{ip}?fields=status,country,regionName,city,isp,mobile,proxy,hosting"
+        url = f"http://ip-api.com/json/{ip}?fields=status,country,regionName,city,zip,isp,mobile,proxy,hosting,lat,lon,timezone"
         with urllib.request.urlopen(url, timeout=2) as resp:
             d = json.loads(resp.read().decode())
         if d.get("status") == "success":
-            return {k: d[k] for k in ("country", "regionName", "city", "isp", "mobile", "proxy", "hosting") if k in d}
+            keys = ("country", "regionName", "city", "zip", "isp", "mobile", "proxy", "hosting", "lat", "lon", "timezone")
+            return {k: d[k] for k in keys if k in d}
     except Exception:
         pass
     return {}
@@ -197,18 +199,49 @@ def append_visit(record):
     save_json_list(VISITS_PATH, visits)
 
 
+def ensure_visit_id():
+    if "visit_id" not in session:
+        session["visit_id"] = secrets.token_hex(6)
+    return session["visit_id"]
+
+
+def server_request_meta():
+    h = request.headers
+    meta = {}
+    if h.get("Accept-Language"):
+        meta["accept_language"] = h.get("Accept-Language", "")[:200]
+    ch = {}
+    if h.get("Sec-CH-UA"):
+        ch["brands"] = h.get("Sec-CH-UA", "")[:300]
+    if h.get("Sec-CH-UA-Mobile"):
+        ch["mobile"] = h.get("Sec-CH-UA-Mobile", "")[:20]
+    if h.get("Sec-CH-UA-Platform"):
+        ch["platform"] = h.get("Sec-CH-UA-Platform", "")[:80]
+    if h.get("Sec-CH-UA-Platform-Version"):
+        ch["platform_version"] = h.get("Sec-CH-UA-Platform-Version", "")[:80]
+    if h.get("Sec-CH-UA-Model"):
+        ch["model"] = h.get("Sec-CH-UA-Model", "")[:80]
+    if ch:
+        meta["client_hints"] = ch
+    if h.get("CF-IPCountry"):
+        meta["cf_country"] = h.get("CF-IPCountry", "")[:8]
+    return meta
+
+
 def log_visit(event, client_meta=None):
     ip = client_ip()
     ua_raw = request.headers.get("User-Agent", "")
     record = {
         "at": time.time(),
         "event": event,
+        "visit_id": ensure_visit_id(),
         "ip": ip,
         "geo": lookup_geo(ip),
         "ua_raw": ua_raw[:500],
         "ua": parse_user_agent(ua_raw),
         "path": request.path,
         "referrer": request.referrer or "",
+        "server": server_request_meta(),
         "client": client_meta or {},
     }
     append_visit(record)
@@ -843,6 +876,27 @@ def track_client():
     data = request.get_json(silent=True) or {}
     log_visit("session", client_meta=data)
     return jsonify({"ok": True})
+
+
+@app.route("/api/admin/stats")
+def admin_stats():
+    if not check_admin():
+        return jsonify({"error": "unauthorized"}), 401
+    visits = load_json_list(VISITS_PATH)
+    now = time.time()
+    day_ago = now - 86400
+    week_ago = now - 86400 * 7
+    today = sum(1 for v in visits if v.get("at", 0) >= day_ago)
+    week = sum(1 for v in visits if v.get("at", 0) >= week_ago)
+    ips = {v.get("ip") for v in visits if v.get("ip")}
+    sessions = {v.get("visit_id") for v in visits if v.get("visit_id")}
+    return jsonify({
+        "total": len(visits),
+        "today": today,
+        "week": week,
+        "unique_ips": len(ips),
+        "unique_sessions": len(sessions),
+    })
 
 
 @app.route("/api/admin/visits")

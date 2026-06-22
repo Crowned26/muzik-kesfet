@@ -255,10 +255,23 @@
         <div id="admin-visits-wrap" class="hidden">
           <hr>
           <h3><span data-i18n="adminRecentVisits">Son Ziyaretler</span> <span id="visit-count" style="opacity:.6;font-weight:normal"></span></h3>
+          <div id="admin-visit-toast" class="admin-toast hidden"></div>
+          <div id="admin-stats" class="admin-stats"></div>
+          <div class="admin-tools">
+            <input type="text" id="visit-filter" class="search-input" placeholder="IP veya oturum ID ara...">
+            <select id="visit-event-filter" class="search-input">
+              <option value="">Tüm olaylar</option>
+              <option value="login">login</option>
+              <option value="admin_login">admin_login</option>
+              <option value="session">session</option>
+            </select>
+            <button type="button" id="visit-export-btn" class="btn secondary">CSV İndir</button>
+            <label><input type="checkbox" id="visit-live"> Canlı yenile (30 sn)</label>
+          </div>
           <div id="admin-visits"><p class="visit-meta">—</p></div>
           <button type="button" id="admin-logout-btn" class="btn ghost" data-i18n="adminLogout">Admin Çıkış</button>
         </div>
-        <p class="version">v3.3</p>
+        <p class="version">v3.5</p>
       </section>
     </section>
 
@@ -277,7 +290,7 @@
   <script src="https://www.youtube.com/iframe_api"></script>
   <script src="{{ url_for('static', filename='js/i18n.js') }}?v=7"></script>
   <script src="{{ url_for('static', filename='js/help-detail.js') }}?v=6"></script>
-  <script src="{{ url_for('static', filename='js/app.js') }}?v=13"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}?v=16"></script>
   <script>
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.getRegistrations().then(function (regs) {
