@@ -535,6 +535,7 @@ def login():
 @app.route("/logout")
 def logout():
     session.pop("site_ok", None)
+    session.pop("admin_ok", None)
     return redirect(url_for("login"))
 
 
@@ -548,9 +549,17 @@ def daily_page():
     return render_template("index.html", open_daily=True)
 
 
-@app.route("/admin")
+@app.route("/admin", methods=["GET", "POST"])
 def admin_page():
-    return render_template("admin.html")
+    if request.method == "POST":
+        if request.form.get("password") == ADMIN_PASSWORD:
+            session["admin_ok"] = True
+            if APP_PASSWORD:
+                session["site_ok"] = True
+            log_visit("admin_login")
+            return redirect("/")
+        return render_template("admin.html", error="Yanlış admin şifresi")
+    return render_template("admin.html", error=None)
 
 
 @app.route("/api/health")

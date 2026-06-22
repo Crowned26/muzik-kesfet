@@ -1073,6 +1073,56 @@ function bindEvents() {
   });
 }
 
+function adminEsc(s) {
+  return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function renderAdminVisits(visits) {
+  var el = byId("admin-visits");
+  var countEl = byId("visit-count");
+  if (!el) return;
+  if (countEl) countEl.textContent = visits.length ? "(" + visits.length + ")" : "";
+  if (!visits.length) {
+    el.innerHTML = "<p class=\"visit-meta\">" + adminEsc(t("adminNoVisits")) + "</p>";
+    return;
+  }
+  var rows = visits.map(function (v) {
+    var ua = v.ua || {};
+    var geo = v.geo || {};
+    var c = v.client || {};
+    var loc = [geo.city, geo.regionName, geo.country].filter(Boolean).join(", ") || "—";
+    var badges = ["<span class=\"visit-badge\">" + adminEsc(v.event) + "</span>"];
+    if (ua.device) badges.push("<span class=\"visit-badge\">" + adminEsc(ua.device) + "</span>");
+    if (c.standalone) badges.push("<span class=\"visit-badge\">PWA</span>");
+    if (geo.proxy) badges.push("<span class=\"visit-badge warn\">Proxy/VPN</span>");
+    var meta = [c.screen, c.lang, c.timezone, geo.isp].filter(Boolean).map(adminEsc).join(" · ");
+    return "<tr><td>" + adminEsc(new Date(v.at * 1000).toLocaleString(window.appLang === "en" ? "en-US" : "tr-TR")) +
+      "<div class=\"visit-meta\">" + badges.join("") + "</div></td>" +
+      "<td>" + adminEsc(v.ip) + "<div class=\"visit-meta\">" + adminEsc(loc) + "</div></td>" +
+      "<td>" + adminEsc(ua.browser || "?") + " / " + adminEsc(ua.os || "?") + "</td>" +
+      "<td><div class=\"visit-meta\">" + (meta || "—") + "</div></td></tr>";
+  }).join("");
+  el.innerHTML = "<table class=\"visit-table\"><thead><tr><th>Zaman</th><th>IP / Konum</th><th>Cihaz</th><th>Detay</th></tr></thead><tbody>" + rows + "</tbody></table>";
+}
+
+function setupAdminVisits() {
+  var wrap = byId("admin-visits-wrap");
+  if (!wrap) return;
+  fetch("/api/admin/status", { credentials: "same-origin" }).then(function (r) { return r.json(); }).then(function (d) {
+    if (!d.ok) return;
+    wrap.classList.remove("hidden");
+    fetch("/api/admin/visits", { credentials: "same-origin" }).then(function (r) { return r.json(); }).then(renderAdminVisits).catch(function () {});
+  }).catch(function () {});
+  var logoutBtn = byId("admin-logout-btn");
+  if (logoutBtn) {
+    logoutBtn.addEventListener("click", function () {
+      fetch("/api/admin/logout", { method: "POST", credentials: "same-origin" }).then(function () {
+        wrap.classList.add("hidden");
+      });
+    });
+  }
+}
+
 function setupTracking() {
   if (sessionStorage.getItem("mk_tracked")) return;
   sessionStorage.setItem("mk_tracked", "1");
@@ -1125,6 +1175,7 @@ function init() {
   setupVoice();
   setupOffline();
   setupTracking();
+  setupAdminVisits();
   renderHelp();
   loadFilters().then(function () {
     renderMission();
