@@ -1,0 +1,20 @@
+{
+  "name": "Müzik Keşfet",
+  "short_name": "Keşfet",
+  "description": "Unlimited music discovery from YouTube",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0f1117",
+  "theme_color": "#7c5cff",
+  "categories": ["music", "entertainment"],
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect fill='%237c5cff' width='512' height='512' rx='96'/><text x='256' y='320' font-size='220' text-anchor='middle' fill='white'>🎵</text></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

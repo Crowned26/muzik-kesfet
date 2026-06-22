@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="description" content="Rastgele müzik keşfet — YouTube'dan sınırsız keşif">
+  <meta property="og:title" content="Müzik Keşfet">
+  <meta property="og:description" content="Unlimited music discovery from YouTube">
+  <meta name="theme-color" content="#7c5cff">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎵</text></svg>">
+  <title>Müzik Keşfet</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <div id="offline-banner" class="offline-banner hidden" role="status"></div>
+  <div id="bg-thumb" class="bg-thumb" aria-hidden="true"></div>
+  <div id="loader" class="loader hidden"><div class="spinner"></div></div>
+  <div id="confetti" class="confetti hidden"></div>
+  <div id="roulette-overlay" class="roulette-overlay hidden">
+    <div class="roulette-wheel">🎵</div>
+    <p data-i18n="loading">YouTube'da şarkı aranıyor...</p>
+  </div>
+
+  <div class="app" id="app-root">
+    <header class="header">
+      <div class="header-top">
+        <div>
+          <p class="eyebrow" data-i18n="eyebrow">Rastgele müzik keşfi</p>
+          <h1 data-i18n="title">Müzik Keşfet</h1>
+        </div>
+        <div class="header-actions">
+          <select id="ui-lang" class="mini-select" aria-label="UI language">
+            <option value="tr">TR</option>
+            <option value="en">EN</option>
+          </select>
+          <button type="button" id="theme-toggle" class="icon-btn" aria-label="Theme">🌙</button>
+        </div>
+      </div>
+      <p class="subtitle" data-i18n="subtitle">Tür, dil ve mod seç — YouTube'dan keşfet.</p>
+      <p class="pool-info" data-i18n="sourceYoutube">YouTube'dan sınırsız keşif</p>
+      <p id="daily-mission" class="daily-mission"></p>
+    </header>
+
+    <nav class="tabs" role="tablist">
+      <button type="button" class="tab active" data-tab="discover" data-i18n="tabDiscover">Keşfet</button>
+      <button type="button" class="tab" data-tab="browse" data-i18n="tabBrowse">Gözat</button>
+      <button type="button" class="tab" data-tab="stats" data-i18n="tabStats">İstatistik</button>
+      <button type="button" class="tab" data-tab="room" data-i18n="tabRoom">Oda</button>
+      <button type="button" class="tab" data-tab="more" data-i18n="tabMore">Daha Fazla</button>
+      <button type="button" class="tab" data-tab="help" data-i18n="tabHelp">Yardım</button>
+    </nav>
+
+    <section id="tab-discover" class="tab-panel active">
+      <section class="panel filters">
+        <div class="field"><label for="genre" data-i18n="genre">Tür</label><select id="genre"><option value="" data-i18n="allGenres">Tüm türler</option></select></div>
+        <div class="field"><label for="language" data-i18n="language">Dil</label><select id="language"><option value="" data-i18n="allLanguages">Tüm diller</option></select></div>
+        <div class="field"><label for="mood" data-i18n="mood">Mod</label><select id="mood"><option value="" data-i18n="allMoods">Tüm modlar</option></select></div>
+        <div class="field"><label for="decade" data-i18n="decade">On yıl</label><select id="decade"><option value="" data-i18n="allDecades">Tümü</option></select></div>
+        <div class="field"><label for="mode-preset" data-i18n="modePreset">Hazır mod</label>
+          <select id="mode-preset">
+            <option value="" data-i18n="modeNormal">Normal</option>
+            <option value="party" data-i18n="modeParty">Parti</option>
+            <option value="study" data-i18n="modeStudy">Çalışma</option>
+            <option value="night" data-i18n="modeNight">Gece</option>
+          </select>
+        </div>
+        <div class="field"><label for="speed" data-i18n="speed">Hız</label>
+          <select id="speed">
+            <option value="1">1x</option>
+            <option value="0.75">0.75x</option>
+            <option value="1.25">1.25x</option>
+          </select>
+        </div>
+        <div class="field toggles">
+          <label><input type="checkbox" id="official-only"> <span data-i18n="officialOnly">Sadece Official</span></label>
+          <label><input type="checkbox" id="auto-time-mood"> <span data-i18n="autoTimeMood">Saate göre mod</span></label>
+          <label><input type="checkbox" id="only-unheard"> <span data-i18n="onlyUnheard">Sadece dinlemediklerim</span></label>
+          <label><input type="checkbox" id="favorites-only"> <span data-i18n="favoritesOnly">Sadece favoriler</span></label>
+          <label><input type="checkbox" id="radio-mode"> <span data-i18n="radio">Radyo Modu</span></label>
+          <label><input type="checkbox" id="blind-mode"> <span data-i18n="blind">Kör Dinleme</span></label>
+          <label><input type="checkbox" id="focus-mode"> <span data-i18n="focus">Odak Modu</span></label>
+        </div>
+        <div class="chip-row" id="quick-chips"></div>
+        <div class="voice-row">
+          <input type="text" id="voice-input" class="search-input" data-i18n-placeholder="voicePlaceholder" placeholder="sakin türkçe pop...">
+          <button type="button" id="mic-btn" class="btn ghost" data-i18n="voiceMic" title="Mikrofon">🎤</button>
+          <button type="button" id="voice-btn" class="btn ghost" data-i18n="voiceSearch">Ara</button>
+        </div>
+        <div class="actions">
+          <button type="button" id="recommend-btn" class="btn primary" data-i18n="recommend">Rastgele Öner</button>
+          <button type="button" id="another-btn" class="btn secondary" disabled data-i18n="another">Başka Öner</button>
+          <button type="button" id="trending-btn" class="btn ghost" data-i18n="trending">Trend</button>
+          <button type="button" id="niche-btn" class="btn ghost" data-i18n="niche">Niche</button>
+          <button type="button" id="same-artist-btn" class="btn ghost" data-i18n="sameArtist">Aynı Sanatçı</button>
+          <button type="button" id="daily-btn" class="btn ghost" data-i18n="daily">Günün Şarkısı</button>
+          <button type="button" id="playlist-btn" class="btn ghost" data-i18n="playlist">Mini Playlist</button>
+          <button type="button" id="compare-btn" class="btn ghost" data-i18n="compare">A vs B</button>
+          <button type="button" id="roulette-btn" class="btn ghost" data-i18n="roulette">Rulet</button>
+          <button type="button" id="guess-btn" class="btn ghost" data-i18n="guessGame">Tahmin Oyunu</button>
+        </div>
+      </section>
+
+      <section id="status" class="status hidden" role="status"></section>
+
+      <section id="guess-panel" class="panel side-panel hidden">
+        <h3 data-i18n="guessGame">Tahmin Oyunu</h3>
+        <p id="guess-timer" class="guess-timer">10</p>
+        <input type="text" id="guess-input" class="search-input" data-i18n-placeholder="guessPlaceholder" placeholder="Sanatçı adı...">
+        <button type="button" id="guess-submit" class="btn primary" data-i18n="guessSubmit">Tahmin Et</button>
+        <p id="guess-result"></p>
+      </section>
+
+      <section id="result" class="panel result hidden swipe-card">
+        <div class="swipe-hint" data-i18n="swipeHint">Mobilde sola/sağa kaydır</div>
+        <div class="result-header">
+          <div>
+            <p class="result-label" data-i18n="nowPlaying">Şimdi dinle</p>
+            <h2 id="song-title">—</h2>
+            <p id="song-artist" class="artist">—</p>
+            <p id="song-bio" class="bio"></p>
+          </div>
+          <div class="badges">
+            <span id="badge-genre" class="badge"></span>
+            <span id="badge-language" class="badge"></span>
+            <span id="badge-mood" class="badge"></span>
+            <span id="badge-decade" class="badge"></span>
+          </div>
+        </div>
+        <div class="player-wrap"><div id="yt-player"></div></div>
+        <div class="result-actions">
+          <button type="button" id="like-btn" class="btn ghost" data-i18n="like">👍 Beğen</button>
+          <button type="button" id="dislike-btn" class="btn ghost" data-i18n="dislike">👎 Beğenme</button>
+          <button type="button" id="favorite-btn" class="btn ghost" data-i18n="addFavorite">♡ Favorilere Ekle</button>
+          <button type="button" id="queue-btn" class="btn ghost" data-i18n="queue">➕ Kuyruğa Ekle</button>
+          <button type="button" id="block-channel-btn" class="btn ghost" data-i18n="blockChannel">🚫 Kanalı Engelle</button>
+          <button type="button" id="never-btn" class="btn ghost" data-i18n="never">Bir Daha Gösterme</button>
+          <button type="button" id="undo-btn" class="btn ghost" data-i18n="undo">↩ Geri Al</button>
+          <button type="button" id="copy-btn" class="btn ghost" data-i18n="copyLink">Linki Kopyala</button>
+          <button type="button" id="share-btn" class="btn ghost" data-i18n="share">Paylaş</button>
+          <a id="lyrics-link" class="btn ghost link-btn" target="_blank" rel="noopener" data-i18n="lyrics">Sözler</a>
+          <a id="open-youtube" class="btn ghost link-btn" target="_blank" rel="noopener" data-i18n="openYoutube">YouTube'da Aç</a>
+          <button type="button" id="report-btn" class="btn ghost" data-i18n="report">Yanlış Video Bildir</button>
+        </div>
+      </section>
+
+      <section id="compare-panel" class="panel compare hidden">
+        <h3 data-i18n="compareTitle">Hangisi daha iyi?</h3>
+        <div class="compare-grid">
+          <div id="compare-a" class="compare-card"></div>
+          <div id="compare-b" class="compare-card"></div>
+        </div>
+      </section>
+
+      <section id="playlist-panel" class="panel side-panel hidden">
+        <h3 data-i18n="playlist">Mini Playlist</h3>
+        <ul id="playlist-list" class="list"></ul>
+      </section>
+
+      <div class="grid">
+        <section class="panel side-panel">
+          <div class="list-header">
+            <h3 data-i18n="recent">Son Önerilenler</h3>
+            <button type="button" id="clear-recent-btn" class="btn ghost btn-mini hidden" data-i18n="clearRecent">Tümünü Sil</button>
+          </div>
+          <ul id="recent-list" class="list"></ul>
+        </section>
+        <section class="panel side-panel">
+          <div class="list-header">
+            <h3 data-i18n="favorites">Favoriler</h3>
+            <button type="button" id="clear-favorites-btn" class="btn ghost btn-mini hidden" data-i18n="clearRecent">Tümünü Sil</button>
+          </div>
+          <ul id="favorites-list" class="list"></ul>
+        </section>
+        <section class="panel side-panel">
+          <div class="list-header">
+            <h3 data-i18n="queueList">Dinleme Kuyruğu</h3>
+            <button type="button" id="clear-queue-btn" class="btn ghost btn-mini hidden" data-i18n="clearRecent">Tümünü Sil</button>
+          </div>
+          <ul id="queue-list" class="list"></ul>
+        </section>
+        <section class="panel side-panel"><h3 data-i18n="badges">Rozetler</h3><ul id="badges-list" class="list"></ul></section>
+      </div>
+    </section>
+
+    <section id="tab-browse" class="tab-panel hidden">
+      <section class="panel filters">
+        <input type="search" id="browse-search" class="search-input" data-i18n-placeholder="search" placeholder="Ara...">
+      </section>
+      <div id="browse-grid" class="browse-grid"></div>
+    </section>
+
+    <section id="tab-stats" class="tab-panel hidden">
+      <section class="panel side-panel stats-panel">
+        <h3 data-i18n="sessionStats">İstatistik</h3>
+        <div class="stats-grid">
+          <div class="stat-card"><span id="stat-discovered">0</span><small data-i18n="discovered">Keşfedilen</small></div>
+          <div class="stat-card"><span id="stat-likes">0</span><small data-i18n="likesCount">Beğeni</small></div>
+          <div class="stat-card"><span id="stat-streak">0</span><small data-i18n="streak">Seri</small></div>
+          <div class="stat-card"><span id="stat-favorites">0</span><small data-i18n="favorites">Favoriler</small></div>
+        </div>
+        <div id="weekly-summary" class="weekly-summary"></div>
+        <div id="genre-profile" class="genre-profile"></div>
+        <h3 data-i18n="passport">Müzik Pasaportu</h3>
+        <div id="passport" class="passport"></div>
+        <button type="button" id="export-btn" class="btn secondary" data-i18n="exportFav">Favorileri Dışa Aktar</button>
+      </section>
+    </section>
+
+    <section id="tab-room" class="tab-panel hidden">
+      <section class="panel side-panel">
+        <h3 data-i18n="tabRoom">Oda</h3>
+        <div class="room-row">
+          <button type="button" id="room-create-btn" class="btn primary" data-i18n="roomCreate">Oda Oluştur</button>
+          <span id="room-code-display" class="room-code">—</span>
+        </div>
+        <div id="room-qr" class="room-qr hidden"></div>
+        <div class="room-row">
+          <input type="text" id="room-join-input" maxlength="6" placeholder="ABC123" class="search-input" autocapitalize="characters">
+          <button type="button" id="room-join-btn" class="btn secondary" data-i18n="roomJoin">Katıl</button>
+        </div>
+        <button type="button" id="room-pick-btn" class="btn ghost" data-i18n="roomPick">Oda İçin Seç</button>
+        <div class="room-votes">
+          <button type="button" id="vote-keep" class="btn ghost" data-i18n="voteKeep">👍 Devam</button>
+          <button type="button" id="vote-skip" class="btn ghost" data-i18n="voteSkip">👎 Geç</button>
+          <span id="vote-counts"></span>
+        </div>
+        <div id="room-song" class="room-song"></div>
+      </section>
+    </section>
+
+    <section id="tab-more" class="tab-panel hidden">
+      <section class="panel side-panel">
+        <h3 data-i18n="sleepTimer">Uyku Zamanlayıcı</h3>
+        <select id="sleep-timer" class="search-input">
+          <option value="0" data-i18n="sleepOff">Kapalı</option>
+          <option value="15">15 dk</option>
+          <option value="30">30 dk</option>
+          <option value="60">60 dk</option>
+        </select>
+        <h3 data-i18n="suggest">Şarkı Öner</h3>
+        <input type="text" id="suggest-artist" class="search-input" placeholder="Sanatçı">
+        <input type="text" id="suggest-title" class="search-input" placeholder="Şarkı">
+        <button type="button" id="suggest-btn" class="btn primary" data-i18n="suggestSend">Gönder</button>
+        <hr>
+        <label><span data-i18n="accent">Vurgu rengi</span> <input type="color" id="accent-picker" value="#7c5cff"></label>
+        <label><input type="checkbox" id="auto-theme"> <span data-i18n="autoTheme">Sistem teması</span></label>
+        <label><input type="checkbox" id="reduced-motion"> <span data-i18n="reducedMotion">Az animasyon</span></label>
+        <button type="button" id="install-btn" class="btn ghost hidden" data-i18n="install">Uygulamayı Yükle</button>
+        <p class="version">v3.1 · <a href="/admin">Admin</a></p>
+      </section>
+    </section>
+
+    <section id="tab-help" class="tab-panel hidden">
+      <section class="panel side-panel help-panel">
+        <h3 data-i18n="tabHelp">Yardım</h3>
+        <p class="help-intro" data-i18n="helpIntro">Her özelliğin ne işe yaradığını aşağıda bulabilirsin.</p>
+        <div id="help-content" class="help-content"></div>
+      </section>
+    </section>
+
+    <footer class="footer"><p data-i18n="footer">Space: yeni · F: favori · L: beğen · D: günün şarkısı</p></footer>
+  </div>
+
+  <script>window.openDaily = {{ 'true' if open_daily|default(false) else 'false' }};</script>
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <script src="{{ url_for('static', filename='js/i18n.js') }}?v=6"></script>
+  <script src="{{ url_for('static', filename='js/help-detail.js') }}?v=6"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}?v=8"></script>
+  <script>
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function (regs) {
+        regs.forEach(function (r) { r.unregister(); });
+      }).finally(function () {
+        navigator.serviceWorker.register("/static/sw.js?v=6").catch(function () {});
+      });
+    }
+  </script>
+</body>
+</html>

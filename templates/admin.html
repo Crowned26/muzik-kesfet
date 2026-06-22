@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin — Müzik Keşfet</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <div class="app">
+    <h1>Admin Panel</h1>
+    <p>Şarkılar YouTube'dan geliyor. Burada kullanıcı önerileri ve video bildirimleri listelenir.</p>
+    <input type="password" id="admin-pass" class="search-input" placeholder="Admin şifresi">
+    <div class="panel side-panel" style="margin-top:16px">
+      <h3>Kullanıcı Önerileri</h3>
+      <ul id="a-suggestions" class="list"></ul>
+    </div>
+    <div class="panel side-panel" style="margin-top:16px">
+      <h3>Video Bildirimleri</h3>
+      <ul id="a-reports" class="list"></ul>
+    </div>
+    <p><a href="/">← Ana sayfa</a></p>
+  </div>
+  <script>
+    const pass = () => document.getElementById("admin-pass").value;
+    const headers = () => ({ "X-Admin-Password": pass() });
+
+    async function loadAdmin() {
+      const [sRes, rRes] = await Promise.all([
+        fetch("/api/admin/suggestions", { headers: headers() }),
+        fetch("/api/admin/reports", { headers: headers() }),
+      ]);
+      if (!sRes.ok || !rRes.ok) return;
+      const suggestions = await sRes.json();
+      const reports = await rRes.json();
+      document.getElementById("a-suggestions").innerHTML = suggestions.length
+        ? suggestions.map(s => "<li>" + s.artist + " — " + s.title + "</li>").join("")
+        : "<li>Henüz öneri yok.</li>";
+      document.getElementById("a-reports").innerHTML = reports.length
+        ? reports.map(r => "<li>" + r.artist + " — " + r.title + " (" + r.youtube_id + ")</li>").join("")
+        : "<li>Henüz bildirim yok.</li>";
+    }
+
+    document.getElementById("admin-pass").addEventListener("change", loadAdmin);
+  </script>
+</body>
+</html>
