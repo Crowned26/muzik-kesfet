@@ -23,7 +23,11 @@ const STORAGE = {
   mission: "mk_mission",
   weekly: "mk_weekly",
   guessScore: "mk_guess_score",
+  listenHistory: "mk_listen_history",
+  queueAutoplay: "mk_queue_autoplay",
 };
+
+const APP_BUILD_VERSION = "3.6.0";
 
 const state = {
   current: null,
@@ -121,6 +125,10 @@ function trackStats(song) {
   stats.genres[song.genre || "youtube"] = (stats.genres[song.genre || "youtube"] || 0) + 1;
   stats.languages[song.language || "global"] = (stats.languages[song.language || "global"] || 0) + 1;
   writeJson(STORAGE.stats, stats);
+  var day = new Date().toISOString().slice(0, 10);
+  var hist = readJson(STORAGE.listenHistory, {});
+  hist[day] = (hist[day] || 0) + 1;
+  writeJson(STORAGE.listenHistory, hist);
 
   const passport = readJson(STORAGE.passport, {});
   const lang = song.language || "global";
@@ -235,6 +243,31 @@ function buildParams(extra) {
   return params;
 }
 
+function shareUrlForSong(song) {
+  if (!song) return location.href;
+  return location.origin + location.pathname + "?v=" + (song.youtube_id || song.id);
+}
+
+function streamingSearchUrl(service, song) {
+  var q = encodeURIComponent((song.artist || "") + " " + (song.title || ""));
+  if (service === "spotify") return "https://open.spotify.com/search/" + q;
+  return "https://music.apple.com/search?term=" + q;
+}
+
+function onPlayerEnded() {
+  if (byId("queue-autoplay") && byId("queue-autoplay").checked) {
+    var q = readJson(STORAGE.queue, []);
+    if (q.length) {
+      var next = q.shift();
+      writeJson(STORAGE.queue, q);
+      renderQueue();
+      showSong(next);
+      return;
+    }
+  }
+  if (byId("radio-mode").checked) fetchRecommendation(false);
+}
+
 function playInPlayer(song) {
   if (!song || !song.youtube_id) return;
   if (!ytReady || typeof YT === "undefined") {
@@ -253,7 +286,7 @@ function playInPlayer(song) {
           try { e.target.setPlaybackRate(speed); } catch (err) { /* ignore */ }
         },
         onStateChange: function (e) {
-          if (e.data === YT.PlayerState.ENDED && byId("radio-mode").checked) fetchRecommendation(false);
+          if (e.data === YT.PlayerState.ENDED) onPlayerEnded();
         },
       },
     });
@@ -292,6 +325,13 @@ function showSong(song, opts) {
   playInPlayer(song);
   byId("open-youtube").href = song.youtube_url;
   byId("lyrics-link").href = song.lyrics_url || "#";
+  var sp = byId("open-spotify");
+  var ap = byId("open-apple");
+  if (sp) sp.href = streamingSearchUrl("spotify", song);
+  if (ap) ap.href = streamingSearchUrl("apple", song);
+  if (history.replaceState) {
+    try { history.replaceState(null, "", shareUrlForSong(song)); } catch (e) { /* ignore */ }
+  }
   byId("result").classList.remove("hidden");
   byId("another-btn").disabled = false;
 
@@ -313,7 +353,6 @@ function showSong(song, opts) {
   addHeard(song.id);
   trackStats(song);
   scheduleRadio();
-  processQueueNext();
   byId("status").classList.add("hidden");
 }
 
@@ -476,16 +515,6 @@ function addToQueue() {
   }
 }
 
-function processQueueNext() {
-  if (byId("radio-mode").checked) return;
-  var q = readJson(STORAGE.queue, []);
-  if (!q.length) return;
-  var next = q.shift();
-  writeJson(STORAGE.queue, q);
-  renderQueue();
-  setTimeout(function () { if (next) showSong(next); }, 60000);
-}
-
 function likeSong(liked) {
   if (!state.current) return;
   var key = liked ? STORAGE.likes : STORAGE.dislikes;
@@ -508,6 +537,24 @@ function neverShow() {
 
 function undoLast() {
   if (state.previous) showSong(state.previous);
+}
+
+async function fetchSimilar() {
+  if (!state.current) { toast(t("error"), true); return; }
+  state.triedIds.push(state.current.id);
+  await fetchRecommendation(false, {
+    endpoint: "/api/similar?" + buildParams({ artist: state.current.artist, genre: state.current.genre }).toString(),
+  });
+}
+
+async function loadSongFromUrl(videoId) {
+  if (!videoId) return;
+  showLoader(true);
+  try {
+    var res = await fetch("/api/song/" + encodeURIComponent(videoId) + "?lang=" + window.appLang);
+    var data = await res.json();
+    if (res.ok) showSong(data);
+  } finally { showLoader(false); }
 }
 
 async function fetchRecommendation(resetTried, opts) {
@@ -681,15 +728,34 @@ async function loadBrowse() {
   });
 }
 
+function renderBarChart(elId, entries, labelFn) {
+  var el = byId(elId);
+  if (!el) return;
+  if (!entries.length) { el.innerHTML = "<p class=\"visit-meta\">—</p>"; return; }
+  var max = Math.max.apply(null, entries.map(function (e) { return e[1]; })) || 1;
+  el.innerHTML = entries.map(function (e) {
+    return '<div class="profile-bar"><span>' + escapeHtml(labelFn ? labelFn(e[0]) : e[0]) + '</span><div style="width:' + Math.max(8, (e[1] / max) * 120) + 'px"></div><small>' + e[1] + "</small></div>";
+  }).join("");
+}
+
 function renderStats() {
-  var stats = readJson(STORAGE.stats, { discovered: 0, genres: {} });
+  var stats = readJson(STORAGE.stats, { discovered: 0, genres: {}, languages: {} });
   var streak = readJson(STORAGE.streak, { count: 0 });
   byId("stat-discovered").textContent = stats.discovered;
   byId("stat-likes").textContent = readJson(STORAGE.likes, []).length;
   byId("stat-streak").textContent = streak.count;
   byId("stat-favorites").textContent = readJson(STORAGE.favorites, []).length;
-  byId("genre-profile").innerHTML = Object.entries(stats.genres || {}).sort(function (a, b) { return b[1] - a[1]; }).slice(0, 5)
-    .map(function (e) { return '<div class="profile-bar"><span>' + e[0] + '</span><div style="width:' + (e[1] * 10) + 'px"></div></div>'; }).join("");
+  renderBarChart("genre-profile", Object.entries(stats.genres || {}).sort(function (a, b) { return b[1] - a[1]; }).slice(0, 5));
+  renderBarChart("lang-chart", Object.entries(stats.languages || {}).sort(function (a, b) { return b[1] - a[1]; }).slice(0, 6));
+  var hist = readJson(STORAGE.listenHistory, {});
+  var days = [];
+  for (var i = 6; i >= 0; i--) {
+    var d = new Date();
+    d.setDate(d.getDate() - i);
+    var key = d.toISOString().slice(0, 10);
+    days.push([key.slice(5), hist[key] || 0]);
+  }
+  renderBarChart("listen-chart", days);
   var weekly = readJson(STORAGE.weekly, {});
   var wk = getWeekKey();
   byId("weekly-summary").innerHTML = "<strong>" + t("weeklySummary") + ":</strong> " + (weekly[wk] || 0) + " " + (window.appLang === "tr" ? "keşif" : "discoveries");
@@ -706,16 +772,17 @@ function renderBadges() {
 
 async function copyLink() {
   if (!state.current) return;
-  var text = state.current.artist + " - " + state.current.title + "\n" + state.current.youtube_url;
+  var text = state.current.artist + " - " + state.current.title + "\n" + shareUrlForSong(state.current);
   try { await navigator.clipboard.writeText(text); toast(t("copied")); }
   catch (e) { toast(t("copyFail"), true); }
 }
 
 async function shareSong() {
   if (!state.current) return;
+  var url = shareUrlForSong(state.current);
   if (navigator.share) {
     try {
-      await navigator.share({ title: t("title"), text: state.current.artist + " - " + state.current.title, url: state.current.youtube_url });
+      await navigator.share({ title: t("title"), text: state.current.artist + " - " + state.current.title, url: url });
       return;
     } catch (e) { /* cancelled */ }
   }
@@ -748,10 +815,23 @@ function showRoomQR(code) {
   qr.classList.remove("hidden");
   qr.innerHTML = '<img src="/api/room/' + encodeURIComponent(code) + '/qr" alt="QR" width="150" height="150">' +
     '<p class="room-link"><code>' + escapeHtml(url) + '</code></p>' +
-    '<button type="button" class="btn ghost" id="room-copy-btn">' + t("copyLink") + "</button>";
+    '<button type="button" class="btn ghost" id="room-copy-btn">' + t("copyLink") + "</button>" +
+    '<button type="button" class="btn ghost" id="room-copy-code-btn">' + t("copyRoomCode") + "</button>";
   byId("room-copy-btn").onclick = function () {
     navigator.clipboard.writeText(url).then(function () { toast(t("copied")); }).catch(function () { toast(t("copyFail"), true); });
   };
+  byId("room-copy-code-btn").onclick = function () {
+    navigator.clipboard.writeText(code).then(function () { toast(t("copied")); }).catch(function () { toast(t("copyFail"), true); });
+  };
+}
+
+function renderRoomHistory(items) {
+  var el = byId("room-history");
+  if (!el) return;
+  if (!items || !items.length) { el.innerHTML = "<li>—</li>"; return; }
+  el.innerHTML = items.slice().reverse().map(function (s) {
+    return "<li><strong>" + escapeHtml(s.title) + "</strong> — " + escapeHtml(s.artist) + "</li>";
+  }).join("");
 }
 
 function startRoomPoll() {
@@ -764,11 +844,14 @@ function startRoomPoll() {
     if (!data || data.error) return;
     if (data.song) {
       byId("room-song").innerHTML = "<strong>" + escapeHtml(data.song.title) + "</strong> — " + escapeHtml(data.song.artist);
+      var np = byId("room-now-playing");
+      if (np) np.textContent = t("roomNowPlaying") + ": " + data.song.title;
       if (!state.current || state.current.id !== data.song.id) showSong(data.song);
     }
     if (data.votes) byId("vote-counts").textContent = "👍 " + data.votes.keep + " / 👎 " + data.votes.skip;
+    renderRoomHistory(data.history || []);
   });
-  state.roomPollTimer = setTimeout(startRoomPoll, 5000);
+  state.roomPollTimer = setTimeout(startRoomPoll, 3000);
 }
 
 async function joinRoom() {
@@ -878,6 +961,16 @@ function renderHelp() {
   var quick = typeof getHelpQuick === "function" ? getHelpQuick() : [];
   var html = '<div class="help-quick"><h4>' + escapeHtml(t("helpQuickTitle")) + "</h4><ol>" +
     quick.map(function (step) { return "<li>" + escapeHtml(step) + "</li>"; }).join("") + "</ol></div>";
+  html += '<div class="help-section"><h4>' + escapeHtml(t("shortcutsTitle")) + "</h4><table class=\"visit-table\"><thead><tr><th>" +
+    escapeHtml(t("helpWhat")) + "</th><th>" + escapeHtml(t("shortcutKey")) + "</th></tr></thead><tbody>" +
+    [
+      [t("recommend"), "Space"],
+      [t("addFavorite"), "F"],
+      [t("like"), "L"],
+      [t("daily"), "D"],
+    ].map(function (row) {
+      return "<tr><td>" + escapeHtml(row[0]) + "</td><td><code>" + escapeHtml(row[1]) + "</code></td></tr>";
+    }).join("") + "</tbody></table></div>";
   getHelpGuide().forEach(function (section) {
     html += '<div class="help-section"><h4>' + escapeHtml(section.title) + "</h4>";
     if (section.intro) html += '<p class="help-section-intro">' + escapeHtml(section.intro) + "</p>";
@@ -1007,6 +1100,7 @@ function bindEvents() {
     byId("same-artist-btn").dataset.active = "1";
     fetchRecommendation(false, { extra: { artist: state.current.artist } });
   };
+  byId("similar-btn").onclick = fetchSimilar;
   byId("guess-btn").onclick = startGuessGame;
   byId("guess-submit").onclick = submitGuess;
   byId("favorite-btn").onclick = toggleFavorite;
@@ -1056,6 +1150,11 @@ function bindEvents() {
   byId("shake-enabled").onchange = function (e) {
     writeJson(STORAGE.shakeEnabled, e.target.checked);
   };
+  var qa = byId("queue-autoplay");
+  if (qa) {
+    qa.checked = readJson(STORAGE.queueAutoplay, true);
+    qa.onchange = function (e) { writeJson(STORAGE.queueAutoplay, e.target.checked); };
+  }
   byId("auto-time-mood").onchange = function () {
     if (byId("auto-time-mood").checked && state.timeMood) byId("mood").value = state.timeMood;
   };
@@ -1272,16 +1371,65 @@ function showVisitToast(msg) {
 function loadAdminVisitsData(notifyNew) {
   return Promise.all([
     fetch("/api/admin/visits", { credentials: "same-origin" }).then(function (r) { return r.json(); }),
-    fetch("/api/admin/stats", { credentials: "same-origin" }).then(function (r) { return r.json(); })
+    fetch("/api/admin/stats", { credentials: "same-origin" }).then(function (r) { return r.json(); }),
+    fetch("/api/admin/suggestions", { credentials: "same-origin" }).then(function (r) { return r.json(); }),
+    fetch("/api/admin/reports", { credentials: "same-origin" }).then(function (r) { return r.json(); }),
   ]).then(function (data) {
     var prevAt = adminVisitsCache.length ? adminVisitsCache[0].at : 0;
     adminVisitsCache = data[0];
     renderAdminStats(data[1]);
+    renderAdminModeration(data[2], data[3]);
     filterAdminVisits();
     if (notifyNew && adminVisitsCache.length && adminVisitsCache[0].at > prevAt) {
       showVisitToast("Yeni ziyaret: " + adminVisitsCache[0].event + " · " + (adminVisitsCache[0].ip || ""));
     }
   });
+}
+
+function renderAdminModeration(suggestions, reports) {
+  var sugEl = byId("admin-suggestions");
+  var repEl = byId("admin-reports");
+  if (sugEl) {
+    sugEl.innerHTML = suggestions.length
+      ? suggestions.map(function (s, i) {
+        return '<li class="list-row"><button type="button" class="list-main" style="text-align:left">' +
+          adminEsc(s.artist) + " — " + adminEsc(s.title) + '</button><button type="button" class="list-del" data-del-sug="' + i + '">×</button></li>';
+      }).join("")
+      : "<li>" + t("adminNoSuggestions") + "</li>";
+    sugEl.querySelectorAll("[data-del-sug]").forEach(function (btn) {
+      btn.onclick = function () {
+        fetch("/api/admin/suggestions/" + btn.getAttribute("data-del-sug"), { method: "DELETE", credentials: "same-origin" })
+          .then(function () { loadAdminVisitsData(false); });
+      };
+    });
+  }
+  if (repEl) {
+    repEl.innerHTML = reports.length
+      ? reports.map(function (r, i) {
+        return '<li class="list-row"><button type="button" class="list-main" style="text-align:left">' +
+          adminEsc(r.artist) + " — " + adminEsc(r.title) + " (" + adminEsc(r.youtube_id) + ')</button><button type="button" class="list-del" data-del-rep="' + i + '">×</button></li>';
+      }).join("")
+      : "<li>" + t("adminNoReports") + "</li>";
+    repEl.querySelectorAll("[data-del-rep]").forEach(function (btn) {
+      btn.onclick = function () {
+        fetch("/api/admin/reports/" + btn.getAttribute("data-del-rep"), { method: "DELETE", credentials: "same-origin" })
+          .then(function () { loadAdminVisitsData(false); });
+      };
+    });
+  }
+}
+
+function checkAppVersion() {
+  fetch("/api/version", { credentials: "same-origin" }).then(function (r) { return r.json(); }).then(function (d) {
+    if (d.version && d.version !== APP_BUILD_VERSION) {
+      var b = byId("update-banner");
+      if (!b) return;
+      b.classList.remove("hidden");
+      b.textContent = t("updateAvailable");
+      b.style.cursor = "pointer";
+      b.onclick = function () { location.reload(); };
+    }
+  }).catch(function () {});
 }
 
 function setupAdminVisits() {
@@ -1464,6 +1612,8 @@ function init() {
   byId("reduced-motion").checked = readJson(STORAGE.reducedMotion, false);
   document.body.classList.toggle("reduced-motion", byId("reduced-motion").checked);
   byId("shake-enabled").checked = readJson(STORAGE.shakeEnabled, true);
+  var qaInit = byId("queue-autoplay");
+  if (qaInit) qaInit.checked = readJson(STORAGE.queueAutoplay, true);
   applyI18n();
   initTheme();
   bindEvents();
@@ -1475,6 +1625,7 @@ function init() {
   setupOffline();
   setupTracking();
   setupAdminVisits();
+  checkAppVersion();
   renderHelp();
   loadFilters().then(function () {
     renderMission();
@@ -1485,6 +1636,7 @@ function init() {
     renderBadges();
     var params = new URLSearchParams(location.search);
     if (params.get("room")) { document.querySelector('[data-tab="room"]').click(); joinRoom(); }
+    else if (params.get("v")) { loadSongFromUrl(params.get("v")); }
     if (window.openDaily) fetchDaily();
   });
 }

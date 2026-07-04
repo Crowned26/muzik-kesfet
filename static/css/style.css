@@ -284,7 +284,8 @@ select, .search-input, .mini-select {
 .passport span { padding: 6px 10px; background: var(--bg-soft); border-radius: 8px; }
 
 .profile-bar { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 0.84rem; }
-.profile-bar div { height: 8px; background: var(--primary); border-radius: 4px; max-width: 120px; }
+.profile-bar div { height: 8px; background: var(--primary); border-radius: 4px; max-width: 120px; min-width: 4px; }
+.profile-bar small { opacity: .7; }
 
 .compare { padding: 16px; margin-top: 12px; }
 .compare-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }

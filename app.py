@@ -17,6 +17,7 @@ from youtubesearchpython import Video, VideosSearch
 
 app = Flask(__name__)
 
+APP_VERSION = "3.6.0"
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
 app.secret_key = os.environ.get("SECRET_KEY") or (
@@ -281,6 +282,26 @@ def get_room(code):
 
 
 load_rooms()
+
+_rate_buckets = {}
+
+
+def rate_limit(max_calls=90, window=60):
+    def decorator(fn):
+        def wrapper(*args, **kwargs):
+            now = time.time()
+            ip = client_ip() or "unknown"
+            bucket = _rate_buckets.setdefault(ip, [])
+            bucket[:] = [t for t in bucket if now - t < window]
+            if len(bucket) >= max_calls:
+                return jsonify({"error": "rate_limit", "message": "Çok fazla istek. Biraz bekle."}), 429
+            bucket.append(now)
+            return fn(*args, **kwargs)
+
+        wrapper.__name__ = fn.__name__
+        return wrapper
+
+    return decorator
 
 
 def parse_csv_param(value):
@@ -597,10 +618,16 @@ def admin_page():
 
 @app.route("/api/health")
 def health():
-    return jsonify({"status": "ok", "source": "youtube", "unlimited": True, "rooms": len(rooms)})
+    return jsonify({"status": "ok", "source": "youtube", "unlimited": True, "rooms": len(rooms), "version": APP_VERSION})
+
+
+@app.route("/api/version")
+def app_version():
+    return jsonify({"version": APP_VERSION})
 
 
 @app.route("/api/trending")
+@rate_limit()
 def trending_api():
     lang = request.args.get("lang", "tr")
     params = dict(request.args)
@@ -676,18 +703,42 @@ def song_by_id(song_id):
 
 
 @app.route("/api/recommend")
+@rate_limit()
 def recommend():
     lang = request.args.get("lang", "tr")
-    payload, error, tried = discover_one(request.args, lang)
-    if payload:
-        return jsonify(payload)
+    tried_all = []
+    for _ in range(3):
+        payload, error, tried = discover_one(request.args, lang, seed=random.randint(0, 999999))
+        tried_all.extend(tried)
+        if payload:
+            return jsonify(payload)
     messages = {
         "no_youtube": "YouTube'da uygun video bulunamadı, tekrar dene.",
     }
-    return jsonify({"error": error, "message": messages.get(error, "Hata"), "tried_ids": tried}), 404
+    return jsonify({"error": error, "message": messages.get(error, "Hata"), "tried_ids": tried_all}), 404
+
+
+@app.route("/api/similar")
+@rate_limit()
+def similar():
+    lang = request.args.get("lang", "tr")
+    params = dict(request.args)
+    if not params.get("artist") and not params.get("genre"):
+        return jsonify({"error": "missing_context", "message": "Önce bir şarkı seç."}), 400
+    if not params.get("artist") and params.get("genre"):
+        params["q"] = params["genre"] + " music official"
+    tried_all = []
+    exclude = parse_csv_param(params.get("exclude", ""))
+    for _ in range(3):
+        payload, error, tried = discover_one(params, lang, seed=random.randint(0, 999999))
+        tried_all.extend(tried)
+        if payload and payload.get("id") not in exclude:
+            return jsonify(payload)
+    return jsonify({"error": error or "no_youtube", "message": "Benzer şarkı bulunamadı.", "tried_ids": tried_all}), 404
 
 
 @app.route("/api/playlist")
+@rate_limit()
 def playlist():
     lang = request.args.get("lang", "tr")
     count = min(int(request.args.get("count", 5)), 10)
@@ -734,7 +785,7 @@ def room_create():
     code = room_code()
     while code in rooms:
         code = room_code()
-    rooms[code] = {"song": None, "votes": {"skip": 0, "keep": 0}, "updated_at": time.time()}
+    rooms[code] = {"song": None, "votes": {"skip": 0, "keep": 0}, "history": [], "updated_at": time.time()}
     save_rooms()
     return jsonify({"code": code})
 
@@ -765,6 +816,9 @@ def room_pick(code):
         return jsonify({"error": error}), 404
     room["song"] = payload
     room["votes"] = {"skip": 0, "keep": 0}
+    hist = room.setdefault("history", [])
+    hist.append({"title": payload.get("title"), "artist": payload.get("artist"), "id": payload.get("id"), "at": time.time()})
+    room["history"] = hist[-30:]
     room["updated_at"] = time.time()
     save_rooms()
     return jsonify(payload)
@@ -775,7 +829,12 @@ def room_get(code):
     code, room = get_room(code)
     if not room:
         return jsonify({"error": "not_found"}), 404
-    return jsonify(room)
+    return jsonify({
+        "song": room.get("song"),
+        "votes": room.get("votes"),
+        "history": room.get("history", []),
+        "updated_at": room.get("updated_at"),
+    })
 
 
 @app.route("/api/room/<code>/qr")
@@ -867,6 +926,30 @@ def admin_reports():
     if not check_admin():
         return jsonify({"error": "unauthorized"}), 401
     return jsonify(load_json_list(REPORTS_PATH))
+
+
+@app.route("/api/admin/suggestions/<int:idx>", methods=["DELETE"])
+def admin_delete_suggestion(idx):
+    if not check_admin():
+        return jsonify({"error": "unauthorized"}), 401
+    items = load_json_list(SUGGESTIONS_PATH)
+    if idx < 0 or idx >= len(items):
+        return jsonify({"error": "not_found"}), 404
+    items.pop(idx)
+    save_json_list(SUGGESTIONS_PATH, items)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/admin/reports/<int:idx>", methods=["DELETE"])
+def admin_delete_report(idx):
+    if not check_admin():
+        return jsonify({"error": "unauthorized"}), 401
+    items = load_json_list(REPORTS_PATH)
+    if idx < 0 or idx >= len(items):
+        return jsonify({"error": "not_found"}), 404
+    items.pop(idx)
+    save_json_list(REPORTS_PATH, items)
+    return jsonify({"ok": True})
 
 
 @app.route("/api/track", methods=["POST"])

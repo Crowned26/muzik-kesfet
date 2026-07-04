@@ -17,6 +17,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
+  <div id="update-banner" class="offline-banner hidden" role="status"></div>
   <div id="offline-banner" class="offline-banner hidden" role="status"></div>
   <div id="bg-thumb" class="bg-thumb" aria-hidden="true"></div>
   <div id="loader" class="loader hidden"><div class="spinner"></div></div>
@@ -82,6 +83,7 @@
           <label><input type="checkbox" id="only-unheard"> <span data-i18n="onlyUnheard">Sadece dinlemediklerim</span></label>
           <label><input type="checkbox" id="favorites-only"> <span data-i18n="favoritesOnly">Sadece favoriler</span></label>
           <label><input type="checkbox" id="radio-mode"> <span data-i18n="radio">Radyo Modu</span></label>
+          <label><input type="checkbox" id="queue-autoplay" checked> <span data-i18n="queueAutoplay">Kuyruk otomatik çalsın</span></label>
           <label><input type="checkbox" id="blind-mode"> <span data-i18n="blind">Kör Dinleme</span></label>
           <label><input type="checkbox" id="focus-mode"> <span data-i18n="focus">Odak Modu</span></label>
         </div>
@@ -97,6 +99,7 @@
           <button type="button" id="trending-btn" class="btn ghost" data-i18n="trending">Trend</button>
           <button type="button" id="niche-btn" class="btn ghost" data-i18n="niche">Niche</button>
           <button type="button" id="same-artist-btn" class="btn ghost" data-i18n="sameArtist">Aynı Sanatçı</button>
+          <button type="button" id="similar-btn" class="btn ghost" data-i18n="similarSong">Benzer Şarkı</button>
           <button type="button" id="daily-btn" class="btn ghost" data-i18n="daily">Günün Şarkısı</button>
           <button type="button" id="playlist-btn" class="btn ghost" data-i18n="playlist">Mini Playlist</button>
           <button type="button" id="compare-btn" class="btn ghost" data-i18n="compare">A vs B</button>
@@ -144,6 +147,8 @@
           <button type="button" id="share-btn" class="btn ghost" data-i18n="share">Paylaş</button>
           <a id="lyrics-link" class="btn ghost link-btn" target="_blank" rel="noopener" data-i18n="lyrics">Sözler</a>
           <a id="open-youtube" class="btn ghost link-btn" target="_blank" rel="noopener" data-i18n="openYoutube">YouTube'da Aç</a>
+          <a id="open-spotify" class="btn ghost link-btn" target="_blank" rel="noopener" data-i18n="openSpotify">Spotify</a>
+          <a id="open-apple" class="btn ghost link-btn" target="_blank" rel="noopener" data-i18n="openApple">Apple Music</a>
           <button type="button" id="report-btn" class="btn ghost" data-i18n="report">Yanlış Video Bildir</button>
         </div>
       </section>
@@ -205,6 +210,10 @@
         </div>
         <div id="weekly-summary" class="weekly-summary"></div>
         <div id="genre-profile" class="genre-profile"></div>
+        <h3 data-i18n="listenHistory">Dinleme Grafiği (7 gün)</h3>
+        <div id="listen-chart" class="genre-profile"></div>
+        <h3 data-i18n="langChart">Dil Dağılımı</h3>
+        <div id="lang-chart" class="genre-profile"></div>
         <h3 data-i18n="passport">Müzik Pasaportu</h3>
         <div id="passport" class="passport"></div>
         <button type="button" id="export-btn" class="btn secondary" data-i18n="exportFav">Favorileri Dışa Aktar</button>
@@ -229,7 +238,10 @@
           <button type="button" id="vote-skip" class="btn ghost" data-i18n="voteSkip">👎 Geç</button>
           <span id="vote-counts"></span>
         </div>
+        <p id="room-now-playing" class="room-song visit-meta"></p>
         <div id="room-song" class="room-song"></div>
+        <h3 data-i18n="roomHistory">Oda Geçmişi</h3>
+        <ul id="room-history" class="list"></ul>
       </section>
     </section>
 
@@ -252,8 +264,10 @@
         <label><input type="checkbox" id="reduced-motion"> <span data-i18n="reducedMotion">Az animasyon</span></label>
         <label><input type="checkbox" id="shake-enabled" checked> <span data-i18n="shakeDiscover">Sallayınca yeni şarkı</span></label>
         <button type="button" id="install-btn" class="btn ghost hidden" data-i18n="install">Uygulamayı Yükle</button>
+        <p><a href="/logout" class="visit-map-link" data-i18n="siteLogout">Site çıkışı</a></p>
         <div id="admin-visits-wrap" class="hidden">
           <hr>
+          <p class="visit-meta admin-disk-note">Not: Render ücretsiz planda sunucu yeniden başlayınca oda ve ziyaret logları sıfırlanabilir.</p>
           <h3><span data-i18n="adminRecentVisits">Son Ziyaretler</span> <span id="visit-count" style="opacity:.6;font-weight:normal"></span></h3>
           <div id="admin-visit-toast" class="admin-toast hidden"></div>
           <div id="admin-stats" class="admin-stats"></div>
@@ -269,9 +283,13 @@
             <label><input type="checkbox" id="visit-live"> Canlı yenile (30 sn)</label>
           </div>
           <div id="admin-visits"><p class="visit-meta">—</p></div>
+          <h3 data-i18n="adminSuggestions">Kullanıcı Önerileri</h3>
+          <ul id="admin-suggestions" class="list"></ul>
+          <h3 data-i18n="adminReports">Video Bildirimleri</h3>
+          <ul id="admin-reports" class="list"></ul>
           <button type="button" id="admin-logout-btn" class="btn ghost" data-i18n="adminLogout">Admin Çıkış</button>
         </div>
-        <p class="version">v3.5</p>
+        <p class="version">v3.6</p>
       </section>
     </section>
 
@@ -288,9 +306,9 @@
 
   <script>window.openDaily = {{ 'true' if open_daily|default(false) else 'false' }};</script>
   <script src="https://www.youtube.com/iframe_api"></script>
-  <script src="{{ url_for('static', filename='js/i18n.js') }}?v=7"></script>
+  <script src="{{ url_for('static', filename='js/i18n.js') }}?v=8"></script>
   <script src="{{ url_for('static', filename='js/help-detail.js') }}?v=6"></script>
-  <script src="{{ url_for('static', filename='js/app.js') }}?v=16"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}?v=17"></script>
   <script>
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.getRegistrations().then(function (regs) {
