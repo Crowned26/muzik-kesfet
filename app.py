@@ -564,6 +564,8 @@ def require_site_password():
         return None
     if request.path.startswith("/api/admin/"):
         return None
+    if request.path in ("/api/version", "/api/health"):
+        return None
     return redirect(url_for("login", next=request.path))
 
 
