@@ -545,6 +545,7 @@ def video_by_id(video_id, lang="tr"):
             "country_flag": "🌍",
             "tags": [],
             "bio": "YouTube",
+            "thumbnail": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg",
             "youtube_id": video_id,
             "youtube_url": f"https://www.youtube.com/watch?v={video_id}",
             "lyrics_url": "#",
@@ -566,7 +567,10 @@ def require_site_password():
         return None
     if request.path in ("/api/version", "/api/health"):
         return None
-    return redirect(url_for("login", next=request.path))
+    next_url = request.full_path
+    if next_url.endswith("?"):
+        next_url = next_url[:-1]
+    return redirect(url_for("login", next=next_url))
 
 
 @app.route("/login", methods=["GET", "POST"])

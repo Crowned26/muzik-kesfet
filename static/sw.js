@@ -1,5 +1,5 @@
-const CACHE = "mk-v6";
-const SHELL = ["/", "/static/css/style.css", "/static/js/i18n.js", "/static/js/app.js"];
+const CACHE = "mk-v8";
+const SHELL = ["/static/css/style.css"];
 
 self.addEventListener("install", function (e) {
   e.waitUntil(caches.open(CACHE).then(function (cache) {
@@ -25,13 +25,15 @@ self.addEventListener("fetch", function (e) {
     }));
     return;
   }
-  if (url.pathname.indexOf("/static/") === 0 || url.pathname === "/") {
+  if (url.pathname.indexOf("/static/js/") === 0 || url.pathname.indexOf("/static/css/") === 0) {
+    e.respondWith(fetch(e.request));
+    return;
+  }
+  if (url.pathname === "/") {
     e.respondWith(
-      fetch(e.request).then(function (res) {
-        var copy = res.clone();
-        caches.open(CACHE).then(function (cache) { cache.put(e.request, copy); });
-        return res;
-      }).catch(function () { return caches.match(e.request).then(function (r) { return r || caches.match("/"); }); })
+      fetch(e.request).catch(function () {
+        return caches.match("/static/css/style.css");
+      })
     );
   }
 });

@@ -834,6 +834,11 @@ function renderRoomHistory(items) {
   }).join("");
 }
 
+function isRoomTabActive() {
+  var panel = byId("tab-room");
+  return panel && !panel.classList.contains("hidden");
+}
+
 function startRoomPoll() {
   clearTimeout(state.roomPollTimer);
   if (!state.roomCode) return;
@@ -846,7 +851,7 @@ function startRoomPoll() {
       byId("room-song").innerHTML = "<strong>" + escapeHtml(data.song.title) + "</strong> — " + escapeHtml(data.song.artist);
       var np = byId("room-now-playing");
       if (np) np.textContent = t("roomNowPlaying") + ": " + data.song.title;
-      if (!state.current || state.current.id !== data.song.id) showSong(data.song);
+      if (isRoomTabActive() && (!state.current || state.current.id !== data.song.id)) showSong(data.song);
     }
     if (data.votes) byId("vote-counts").textContent = "👍 " + data.votes.keep + " / 👎 " + data.votes.skip;
     renderRoomHistory(data.history || []);
