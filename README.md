@@ -1,59 +1,29 @@
-# Python Hesap Makinesi
+# Müzik Keşfet
 
-Basit bir komut satırı hesap makinesi uygulaması.
+YouTube üzerinde müzik keşfi, günlük öneriler ve paylaşılabilir dinleme odaları
+sunan Flask uygulaması.
 
-## Özellikler
+## Yerelde çalıştırma
 
-- Toplama işlemi
-- Çıkarma işlemi
-- Çarpma işlemi
-- Bölme işlemi (sıfıra bölme kontrolü ile)
-- Kullanıcı dostu arayüz
-- Hata yönetimi
-
-## Kurulum
-
-1. Bu projeyi bilgisayarınıza klonlayın veya indirin
-2. Terminalde proje dizinine gidin
-3. Programı çalıştırmak için:
-   ```bash
-   python calculator.py
-   ```
-
-## Kullanım
-
-1. Programı çalıştırdığınızda menü görünecektir
-2. Yapmak istediğiniz işlem için 1-4 arasında bir sayı seçin
-3. İstenen sayıları girin
-4. Sonucu görün
-5. Çıkmak için 5'e basın
-
-## Örnek Kullanım
-
-```
-=== PYTHON HESAP MAKİNESİ ===
-1. Toplama
-2. Çıkarma
-3. Çarpma
-4. Bölme
-5. Çıkış
-==========================
-Yapmak istediğiniz işlemi seçin (1-5): 1
-Birinci sayıyı girin: 10
-İkinci sayıyı girin: 5
-
-10.0 + 5.0 = 15.0
+```bash
+python -m venv .venv
+. .venv/bin/activate
+pip install -r requirements.txt
+export SECRET_KEY="yerel-uzun-rastgele-deger"
+export ADMIN_PASSWORD="guclu-admin-parolasi"
+export APP_PASSWORD="site-erisim-parolasi"
+python app.py
 ```
 
-## Gereksinimler
+`APP_PASSWORD` boş bırakılırsa site herkese açıktır. `ADMIN_PASSWORD` boş ise
+admin girişi devre dışıdır; varsayılan admin parolası yoktur.
 
-- Python 3.6+
+## Render
 
-## Yapı
+`render.yaml`, gerekli gizli değerleri Render üzerinde üretir. Yayına almadan
+önce Render panelinden `APP_PASSWORD` ve `ADMIN_PASSWORD` değerlerini güvenli
+bir parola yöneticisine kaydedin. Bu değerleri repoya veya istemci koduna
+eklemeyin.
 
-- `calculator.py` - Ana program dosyası
-- `README.md` - Proje dokümantasyonu
-
-## Lisans
-
-Bu proje MIT lisansı altında dağıtılmaktadır.
+Uygulama öneri ve raporları yerel JSON dosyalarında tutar. Kalıcı kullanıcı
+verisi gerektiren bir sürüm için yönetilen veritabanına geçilmelidir.

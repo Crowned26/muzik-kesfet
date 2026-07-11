@@ -19,9 +19,15 @@ app = Flask(__name__)
 
 APP_VERSION = "3.6.0"
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
-app.secret_key = os.environ.get("SECRET_KEY") or (
-    hashlib.sha256(APP_PASSWORD.encode()).hexdigest() if APP_PASSWORD else "local-dev-secret"
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+# Never derive the signing key from a password or use a checked-in fallback.
+# A generated local key keeps development convenient while Render supplies a
+# stable value through SECRET_KEY.
+app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_urlsafe(32)
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=os.environ.get("SESSION_COOKIE_SECURE", "").lower() in ("1", "true", "yes"),
 )
 
 BASE_DIR = Path(__file__).parent
@@ -581,7 +587,7 @@ def login():
         return redirect(request.args.get("next") or "/")
     error = None
     if request.method == "POST":
-        if request.form.get("password") == APP_PASSWORD:
+        if secrets.compare_digest(request.form.get("password", ""), APP_PASSWORD):
             session["site_ok"] = True
             log_visit("login")
             nxt = request.form.get("next") or request.args.get("next") or "/"
@@ -612,7 +618,7 @@ def daily_page():
 @app.route("/admin", methods=["GET", "POST"])
 def admin_page():
     if request.method == "POST":
-        if request.form.get("password") == ADMIN_PASSWORD:
+        if ADMIN_PASSWORD and secrets.compare_digest(request.form.get("password", ""), ADMIN_PASSWORD):
             session["admin_ok"] = True
             if APP_PASSWORD:
                 session["site_ok"] = True
@@ -896,7 +902,8 @@ def suggest_song():
 def check_admin():
     if session.get("admin_ok"):
         return True
-    return request.headers.get("X-Admin-Password") == ADMIN_PASSWORD
+    supplied = request.headers.get("X-Admin-Password", "")
+    return bool(ADMIN_PASSWORD) and secrets.compare_digest(supplied, ADMIN_PASSWORD)
 
 
 @app.route("/api/admin/status")
@@ -908,7 +915,7 @@ def admin_status():
 def admin_unlock():
     data = request.get_json(silent=True) or {}
     pw = data.get("password") or request.form.get("password", "")
-    if pw == ADMIN_PASSWORD:
+    if ADMIN_PASSWORD and secrets.compare_digest(pw, ADMIN_PASSWORD):
         session["admin_ok"] = True
         return jsonify({"ok": True})
     return jsonify({"error": "wrong"}), 401
